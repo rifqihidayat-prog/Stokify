@@ -18,9 +18,9 @@ stokify.db-shm
 *.db-shm
 
 # Env
-.env
 .env.local
 .env.*.local
+!.env
 !.env.example
 
 # Logs & OS
