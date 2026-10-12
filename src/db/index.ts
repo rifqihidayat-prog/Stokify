@@ -6,7 +6,10 @@ import * as schema from "./schema";
 // Untuk Turso cloud, set DATABASE_URL + TURSO_AUTH_TOKEN di .env.local.
 const url = process.env.DATABASE_URL ?? "file:./stokify.db";
 
-export const client = createClient({ url });
+export const client = createClient({
+  url,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
 
 export const db = drizzle(client, { schema });
 
