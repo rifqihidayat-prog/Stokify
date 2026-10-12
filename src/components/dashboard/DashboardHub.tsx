@@ -12,7 +12,6 @@ import {
   Plus,
   Send,
   Moon,
-  Scale,
   ArrowRight,
   TrendingUp,
   FileSpreadsheet,
@@ -27,7 +26,6 @@ import { SupplierInflowModal } from "@/components/operations/SupplierInflowModal
 import { SendStockModal } from "@/components/operations/SendStockModal";
 import { PickingListModal } from "@/components/operations/PickingListModal";
 import { DailyClosingModal } from "@/components/operations/DailyClosingModal";
-import { StoreAdjustmentModal } from "@/components/operations/StoreAdjustmentModal";
 import type { DashboardStats } from "@/actions/dashboard";
 import type { PickingListItem } from "@/actions/requests";
 import type { AutocompleteItem } from "@/components/ui/Autocomplete";
@@ -56,7 +54,6 @@ export function DashboardHub({
   const [isSendStockOpen, setIsSendStockOpen] = useState(false);
   const [isPickingOpen, setIsPickingOpen] = useState(false);
   const [isClosingOpen, setIsClosingOpen] = useState(false);
-  const [isAdjOpen, setIsAdjOpen] = useState(false);
 
   const handleRefresh = () => {
     router.refresh();
@@ -170,14 +167,6 @@ export function DashboardHub({
               <Moon className="h-4 w-4 text-amber-400" />
               <span>Input Closing Harian</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setIsAdjOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-[#161B26] px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-[#1D2332] active:scale-[0.98] transition"
-            >
-              <Scale className="h-4 w-4 text-sky-400" />
-              <span>Stock Opname Fisik</span>
-            </button>
           </>
         )}
 
@@ -257,31 +246,37 @@ export function DashboardHub({
         </div>
 
         <div className="divide-y divide-white/[0.04]">
-          {stats.recentMutations.map((m) => (
-            <div
-              key={m.id}
-              className="py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 hover:bg-white/[0.02] px-2 rounded-xl transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20 tabular-nums">
-                  {m.ref}
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-zinc-100">{m.item}</p>
-                  <p className="text-xs text-zinc-400">
-                    {m.sender} &rarr; <span className="text-zinc-200 font-medium">{m.receiver}</span>
-                  </p>
+          {stats.recentMutations.length === 0 ? (
+            <div className="py-8 text-center text-xs text-zinc-500">
+              Belum ada riwayat transaksi mutasi tercatat.
+            </div>
+          ) : (
+            stats.recentMutations.map((m) => (
+              <div
+                key={m.id}
+                className="py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 hover:bg-white/[0.02] px-2 rounded-xl transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20 tabular-nums">
+                    {m.ref}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-100">{m.item}</p>
+                    <p className="text-xs text-zinc-400">
+                      {m.sender} &rarr; <span className="text-zinc-200 font-medium">{m.receiver}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 self-end sm:self-center">
+                  <span className="font-mono font-bold text-sm text-zinc-100 tabular-nums">
+                    {m.qty} {m.unit}
+                  </span>
+                  <span className="text-xs text-zinc-500 font-mono tabular-nums">{formatDate(m.date)}</span>
                 </div>
               </div>
-
-              <div className="flex items-center gap-4 self-end sm:self-center">
-                <span className="font-mono font-bold text-sm text-zinc-100 tabular-nums">
-                  {m.qty} {m.unit}
-                </span>
-                <span className="text-xs text-zinc-500 font-mono tabular-nums">{formatDate(m.date)}</span>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -309,14 +304,6 @@ export function DashboardHub({
       <DailyClosingModal
         isOpen={isClosingOpen}
         onClose={() => setIsClosingOpen(false)}
-        storeName={user?.store_name || "Toko Cabang Surabaya"}
-        products={autocompleteProducts}
-        onSuccess={handleRefresh}
-      />
-
-      <StoreAdjustmentModal
-        isOpen={isAdjOpen}
-        onClose={() => setIsAdjOpen(false)}
         storeName={user?.store_name || "Toko Cabang Surabaya"}
         products={autocompleteProducts}
         onSuccess={handleRefresh}

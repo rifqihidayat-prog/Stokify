@@ -157,7 +157,7 @@ export async function syncProductsFromGoogleSheet(): Promise<ActionResult> {
           category: cat,
           unit: item.unit,
           min_stock_central: 20, // Default minimum stok aman
-          current_stock_central: 50, // Default stok awal
+          current_stock_central: 0, // Default stok awal 0
           is_orderable: item.isOrderable,
         });
         insertedCount++;

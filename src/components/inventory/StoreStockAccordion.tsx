@@ -108,14 +108,14 @@ export function StoreStockAccordion({
                   </Button>
                 )}
 
-                {onOpenAdjustment && (
+                {onOpenAdjustment && role === "ADMIN_PUSAT" && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => onOpenAdjustment(store.store_name)}
                     className="text-xs py-1.5 h-8 border-white/[0.08]"
-                    title="Adjustment Selisih Opname Fisik"
+                    title="Adjustment Selisih Opname Fisik (Admin Pusat)"
                   >
                     <Scale className="h-3.5 w-3.5 mr-1 text-sky-400" />
                     <span className="hidden sm:inline">Opname Fisik</span>

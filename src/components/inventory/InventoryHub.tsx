@@ -166,7 +166,7 @@ export function InventoryHub({
           stores={storeGroups}
           role={role}
           onOpenClosing={(st) => setClosingStore(st)}
-          onOpenAdjustment={(st) => setAdjStore(st)}
+          onOpenAdjustment={role === "ADMIN_PUSAT" ? (st) => setAdjStore(st) : undefined}
           onOpenRequest={() => router.push("/requests")}
         />
       )}
@@ -208,7 +208,7 @@ export function InventoryHub({
         />
       )}
 
-      {adjStore && (
+      {role === "ADMIN_PUSAT" && adjStore && (
         <StoreAdjustmentModal
           isOpen={!!adjStore}
           onClose={() => setAdjStore(null)}

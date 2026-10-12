@@ -8,6 +8,7 @@ import {
   mutationLogs,
   products,
   storeStocks,
+  users,
   type MutationLog,
   type Product,
 } from "@/db/schema";
@@ -133,8 +134,10 @@ export async function getStoreStockCards(filters?: DateFilter): Promise<StoreSto
   await requireUser();
   const allProducts = await db.select().from(products).all();
   const allLogs = await db.select().from(mutationLogs).all();
+  const allStoreStocks = await db.select().from(storeStocks).all();
+  const allUsers = await db.select().from(users).all();
 
-  // Ambil daftar toko unik dari sender/receiver dan store_stocks
+  // Ambil daftar toko unik dari sender/receiver, store_stocks, dan user role STAF_TOKO
   const storeNames = new Set<string>();
   allLogs.forEach((l) => {
     if (l.receiver_location && !["GUDANG PUSAT", "CLOSING"].includes(l.receiver_location) && !l.receiver_location.startsWith("SUPPLIER")) {
@@ -142,6 +145,14 @@ export async function getStoreStockCards(filters?: DateFilter): Promise<StoreSto
     }
     if (l.sender_location && !["GUDANG PUSAT", "CLOSING"].includes(l.sender_location) && !l.sender_location.startsWith("SUPPLIER")) {
       storeNames.add(l.sender_location);
+    }
+  });
+  allStoreStocks.forEach((s) => {
+    if (s.store_name) storeNames.add(s.store_name);
+  });
+  allUsers.forEach((u) => {
+    if (u.role === "STAF_TOKO" && u.store_name) {
+      storeNames.add(u.store_name);
     }
   });
 
@@ -186,10 +197,13 @@ export async function getStoreStockCards(filters?: DateFilter): Promise<StoreSto
         )
         .reduce((sum, l) => sum + l.qty, 0);
 
-      // Hanya tampilkan jika barang ini pernah dikirim / ada mutasi atau jika stok > 0
       const sisa_stok_realtime = Math.max(0, stok_masuk - stok_keluar);
+      const isStoreItem = allStoreStocks.some(
+        (s) => s.store_name === storeName && s.item_id === prod.id
+      );
 
-      if (stok_masuk > 0 || stok_keluar > 0 || sisa_stok_realtime > 0) {
+      // Tampilkan jika barang ini pernah dikirim, ada mutasi, atau terdaftar di store_stocks
+      if (stok_masuk > 0 || stok_keluar > 0 || sisa_stok_realtime > 0 || isStoreItem) {
         let status: "KRITIS" | "WARNING" | "AMAN" = "AMAN";
         if (sisa_stok_realtime <= prod.min_stock_store) {
           status = "KRITIS";
@@ -480,7 +494,8 @@ export async function createStoreDailyClosing(data: {
 }
 
 /**
- * 4. Toko: "Stock Adjustment Toko (Opname Fisik)"
+ * 4. Admin: "Stock Adjustment Toko (Opname Fisik)"
+ * Hanya Admin Pusat yang memiliki wewenang penyesuaian/opname fisik stok toko.
  */
 export async function createStoreAdjustment(data: {
   storeName: string;
@@ -488,11 +503,10 @@ export async function createStoreAdjustment(data: {
   qtyAdjusted: number;
   reason: string;
 }): Promise<ActionResult> {
-  const auth = await authorize();
+  const auth = await authorize("ADMIN_PUSAT");
   if (auth.error) return auth.error;
 
   const { itemId, qtyAdjusted, reason } = data;
-  // Staf Toko hanya boleh adjustment untuk tokonya sendiri
   const storeName = resolveStoreName(auth.user, data.storeName);
   if (!storeName) return fail("Nama toko wajib diisi.");
   if (!itemId) return fail("Pilih barang yang disesuaikan.");
