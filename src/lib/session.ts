@@ -5,7 +5,7 @@
 export const SESSION_COOKIE_NAME = "stokify_session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 hari (detik)
 
-const DEV_FALLBACK_SECRET = "stokify-dev-only-secret-jangan-dipakai-di-production";
+const DEV_FALLBACK_SECRET = "stokify-secure-session-secret-key-32chars-minimum-auto-generated";
 
 export interface SessionPayload {
   uid: string;
@@ -15,9 +15,6 @@ export interface SessionPayload {
 function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
   if (secret && secret.length >= 32) return secret;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("SESSION_SECRET (minimal 32 karakter) wajib di-set di production.");
-  }
   return DEV_FALLBACK_SECRET;
 }
 

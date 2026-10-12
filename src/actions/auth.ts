@@ -124,7 +124,7 @@ export async function loginWithCredentials(
       path: "/",
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.COOKIE_SECURE === "true",
       maxAge: SESSION_MAX_AGE,
     });
 
