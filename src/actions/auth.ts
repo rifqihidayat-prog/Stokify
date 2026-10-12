@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { ok, fail, type ActionResult } from "./types";
@@ -83,7 +83,7 @@ export async function loginWithCredentials(
   usernameInput: string,
   passwordInput: string
 ): Promise<ActionResult> {
-  const username = (usernameInput || "").trim();
+  const username = (usernameInput || "").trim().toLowerCase();
   const password = (passwordInput || "").trim();
 
   if (!username || !password) {
@@ -99,7 +99,7 @@ export async function loginWithCredentials(
     const user = await db
       .select()
       .from(users)
-      .where(eq(users.username, username))
+      .where(sql`lower(${users.username}) = ${username}`)
       .get();
 
     if (!user || !(await verifyPassword(password, user.password))) {

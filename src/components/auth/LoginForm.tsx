@@ -12,6 +12,8 @@ import {
   ShieldCheck,
   Store,
   Sparkles,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { loginWithCredentials } from "@/actions/auth";
 
@@ -49,6 +51,7 @@ export function LoginForm() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -137,6 +140,8 @@ export function LoginForm() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Contoh: admin atau toko.surabaya"
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
                 required
                 disabled={isLoading}
                 className="w-full rounded-xl border border-white/[0.08] bg-[#0A0D14] pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 transition-all focus:border-amber-400/50 focus:bg-[#0E121B] focus:outline-none focus:ring-2 focus:ring-amber-400/20 disabled:opacity-50"
@@ -158,15 +163,23 @@ export function LoginForm() {
               <input
                 id="password"
                 name="password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Masukkan kata sandi..."
                 autoComplete="current-password"
                 required
                 disabled={isLoading}
-                className="w-full rounded-xl border border-white/[0.08] bg-[#0A0D14] pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 transition-all focus:border-amber-400/50 focus:bg-[#0E121B] focus:outline-none focus:ring-2 focus:ring-amber-400/20 disabled:opacity-50"
+                className="w-full rounded-xl border border-white/[0.08] bg-[#0A0D14] pl-10 pr-10 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 transition-all focus:border-amber-400/50 focus:bg-[#0E121B] focus:outline-none focus:ring-2 focus:ring-amber-400/20 disabled:opacity-50"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                title={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 
