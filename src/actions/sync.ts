@@ -6,8 +6,9 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { products, type Product } from "@/db/schema";
 import { fail, ok, type ActionResult } from "./types";
+import { authorize } from "@/lib/authz";
 
-const DEFAULT_SHEET_ID = "1-LakqsOxhn3jbUaizBuLjNVRk_0K8B8xbBLe0RmidaU";
+const DEFAULT_SHEET_ID = process.env.GOOGLE_SHEET_ID || "1-LakqsOxhn3jbUaizBuLjNVRk_0K8B8xbBLe0RmidaU";
 
 export type GSheetRow = {
   sku: string;
@@ -42,9 +43,12 @@ function parseCsvLine(line: string): string[] {
 /**
  * Mengunduh dan menyinkronkan master produk dari Google Sheets
  */
-export async function syncProductsFromGoogleSheet(
-  sheetId = DEFAULT_SHEET_ID
-): Promise<ActionResult> {
+export async function syncProductsFromGoogleSheet(): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
+  // Sheet ID hanya dari konfigurasi server, tidak dari input client
+  const sheetId = DEFAULT_SHEET_ID;
   try {
     const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
     const response = await fetch(url, {

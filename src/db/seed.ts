@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { client, db } from "./index";
+import { ensureSchema } from "./bootstrap";
+import { hashPassword } from "@/lib/password";
 import {
   products,
   storeStocks,
@@ -13,6 +15,25 @@ import {
 async function main() {
   console.log("🌱 Seeding database Stokify (No-Beginning-Stock & Ledger Model)...");
 
+  // Seed demo MENGHAPUS SEMUA DATA. Jangan pernah jalan di production / DB berisi data.
+  if (process.env.NODE_ENV === "production") {
+    console.error("❌ Seed demo ditolak: NODE_ENV=production.");
+    process.exit(1);
+  }
+  const hasUsersTable = await client.execute(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users'`
+  );
+  if (hasUsersTable.rows.length > 0 && !process.argv.includes("--reset")) {
+    const existing = await client.execute(`SELECT COUNT(*) AS total FROM users`);
+    if (Number(existing.rows[0]?.total ?? 0) > 0) {
+      console.error(
+        "❌ Database sudah berisi data. Seed demo akan MENGHAPUS SEMUA DATA.\n" +
+          "   Jalankan `npm run db:reset-demo` bila memang ingin mereset ke data demo."
+      );
+      process.exit(1);
+    }
+  }
+
   // Drop old tables to ensure schema migration
   await client.execute(`DROP TABLE IF EXISTS mutation_logs;`);
   await client.execute(`DROP TABLE IF EXISTS store_stocks;`);
@@ -22,86 +43,7 @@ async function main() {
   await client.execute(`DROP TABLE IF EXISTS users;`);
 
   // Create tables with full latest schema
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      password TEXT NOT NULL,
-      name TEXT NOT NULL,
-      email TEXT,
-      role TEXT NOT NULL,
-      store_name TEXT NOT NULL,
-      created_at INTEGER
-    );
-  `);
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      sku TEXT,
-      name TEXT NOT NULL,
-      category TEXT NOT NULL DEFAULT 'DAILY_CONSUMABLE',
-      item_type TEXT NOT NULL DEFAULT 'CONSUMABLE',
-      unit TEXT NOT NULL,
-      min_stock_central INTEGER NOT NULL DEFAULT 10,
-      min_stock_store INTEGER NOT NULL DEFAULT 5,
-      current_stock_central INTEGER NOT NULL DEFAULT 0,
-      is_orderable INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER
-    );
-  `);
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS store_stocks (
-      id TEXT PRIMARY KEY,
-      store_name TEXT NOT NULL,
-      item_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      current_stock INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER
-    );
-  `);
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS mutation_logs (
-      id TEXT PRIMARY KEY,
-      reference_no TEXT NOT NULL,
-      transaction_date INTEGER NOT NULL,
-      sender_location TEXT NOT NULL,
-      receiver_location TEXT NOT NULL,
-      item_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      qty INTEGER NOT NULL,
-      notes TEXT,
-      created_at INTEGER NOT NULL
-    );
-  `);
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS store_requests (
-      id TEXT PRIMARY KEY,
-      reference_no TEXT,
-      store_name TEXT NOT NULL,
-      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      quantity_requested INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      notes TEXT,
-      created_at INTEGER NOT NULL
-    );
-  `);
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS equipment_requests (
-      id TEXT PRIMARY KEY,
-      store_name TEXT NOT NULL,
-      equipment_name TEXT NOT NULL,
-      reason TEXT NOT NULL,
-      quantity INTEGER NOT NULL DEFAULT 1,
-      description TEXT NOT NULL,
-      image_url TEXT,
-      urgency TEXT NOT NULL DEFAULT 'MEDIUM',
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      created_at INTEGER NOT NULL
-    );
-  `);
+  await ensureSchema();
 
   // Bersihkan data lama agar bisa dijalankan ulang (idempotent)
   await db.delete(mutationLogs);
@@ -202,12 +144,13 @@ async function main() {
   const bySku = new Map(insertedProducts.map((p) => [p.sku, p]));
   const byName = new Map(insertedProducts.map((p) => [p.name, p]));
 
-  // ---------- Users ----------
+  // ---------- Users ---------- (password demo lokal: "password", disimpan ter-hash)
+  const demoPassword = await hashPassword("password");
   await db.insert(users).values([
     {
       id: randomUUID(),
       username: "admin",
-      password: "password",
+      password: demoPassword,
       name: "Administrator Gudang Pusat",
       email: "admin.pusat@stokify.internal",
       role: "ADMIN_PUSAT",
@@ -217,7 +160,7 @@ async function main() {
     {
       id: randomUUID(),
       username: "toko.surabaya",
-      password: "password",
+      password: demoPassword,
       name: "Staf Toko Surabaya",
       email: "surabaya@stokify.internal",
       role: "STAF_TOKO",
@@ -227,7 +170,7 @@ async function main() {
     {
       id: randomUUID(),
       username: "toko.bandung",
-      password: "password",
+      password: demoPassword,
       name: "Staf Toko Bandung",
       email: "bandung@stokify.internal",
       role: "STAF_TOKO",

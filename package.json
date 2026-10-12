@@ -10,6 +10,7 @@
     "lint": "next lint",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
+    "db:reset-demo": "tsx src/db/seed.ts --reset",
     "db:setup": "npm run db:push && npm run db:seed",
     "db:studio": "drizzle-kit studio"
   },

@@ -5,9 +5,16 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users, type User } from "@/db/schema";
+import { users } from "@/db/schema";
 import { ok, fail, type ActionResult } from "./types";
 import type { Role } from "@/lib/utils";
+import { hashPassword, isPasswordHashed, verifyPassword } from "@/lib/password";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE,
+  createSessionToken,
+  verifySessionToken,
+} from "@/lib/session";
 
 export interface AuthUser {
   id: string;
@@ -18,26 +25,52 @@ export interface AuthUser {
   store_name: string;
 }
 
-const SESSION_COOKIE_NAME = "stokify_session";
+// Batas percobaan login gagal per username (in-memory, per proses).
+const MAX_FAILED_ATTEMPTS = 10;
+const LOCKOUT_MS = 15 * 60 * 1000;
+const failedLogins = new Map<string, { count: number; firstAt: number }>();
+
+function isLockedOut(username: string): boolean {
+  const entry = failedLogins.get(username);
+  if (!entry) return false;
+  if (Date.now() - entry.firstAt > LOCKOUT_MS) {
+    failedLogins.delete(username);
+    return false;
+  }
+  return entry.count >= MAX_FAILED_ATTEMPTS;
+}
+
+function recordFailedLogin(username: string) {
+  const entry = failedLogins.get(username);
+  if (!entry || Date.now() - entry.firstAt > LOCKOUT_MS) {
+    failedLogins.set(username, { count: 1, firstAt: Date.now() });
+  } else {
+    entry.count++;
+  }
+}
 
 /**
- * Mendapatkan user aktif saat ini dari session cookie
+ * Mendapatkan user aktif saat ini dari session cookie bertanda tangan.
+ * Data user selalu dibaca ulang dari database, jadi perubahan role / penghapusan
+ * akun langsung berlaku tanpa menunggu cookie kedaluwarsa.
  */
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
     const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
+    const session = await verifySessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+    if (!session) return null;
 
-    if (!sessionCookie?.value) {
-      return null;
-    }
+    const user = await db.select().from(users).where(eq(users.id, session.uid)).get();
+    if (!user) return null;
 
-    const userData = JSON.parse(sessionCookie.value) as AuthUser;
-    if (!userData.id || !userData.username || !userData.role) {
-      return null;
-    }
-
-    return userData;
+    return {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      role: user.role as Role,
+      store_name: user.store_name,
+    };
   } catch {
     return null;
   }
@@ -57,6 +90,11 @@ export async function loginWithCredentials(
     return fail("Username dan password wajib diisi.");
   }
 
+  const lockKey = username.toLowerCase();
+  if (isLockedOut(lockKey)) {
+    return fail("Terlalu banyak percobaan login gagal. Coba lagi dalam 15 menit.");
+  }
+
   try {
     const user = await db
       .select()
@@ -64,39 +102,37 @@ export async function loginWithCredentials(
       .where(eq(users.username, username))
       .get();
 
-    if (!user || user.password !== password) {
+    if (!user || !(await verifyPassword(password, user.password))) {
+      recordFailedLogin(lockKey);
       return fail("Username atau kata sandi salah. Silakan periksa kembali.");
     }
 
-    const authUser: AuthUser = {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role as Role,
-      store_name: user.store_name,
-    };
+    failedLogins.delete(lockKey);
+
+    // Migrasi otomatis password lama (plaintext) ke hash saat login berhasil
+    if (!isPasswordHashed(user.password)) {
+      await db
+        .update(users)
+        .set({ password: await hashPassword(password) })
+        .where(eq(users.id, user.id));
+    }
 
     const cookieStore = await cookies();
 
-    // Set cookie session (30 hari)
-    cookieStore.set(SESSION_COOKIE_NAME, JSON.stringify(authUser), {
+    // Set cookie session bertanda tangan (30 hari)
+    cookieStore.set(SESSION_COOKIE_NAME, await createSessionToken(user.id), {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: SESSION_MAX_AGE,
     });
 
-    // Sinkronkan juga cookie role untuk backward compatibility
-    cookieStore.set("stokify_role", authUser.role, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    // Cookie role lama tidak dipakai lagi untuk otorisasi
+    cookieStore.delete("stokify_role");
 
     revalidatePath("/", "layout");
-    return ok(`Selamat datang kembali, ${authUser.name}!`);
+    return ok(`Selamat datang kembali, ${user.name}!`);
   } catch (err: any) {
     console.error("Login error:", err);
     return fail("Terjadi kesalahan sistem saat proses autentikasi.");

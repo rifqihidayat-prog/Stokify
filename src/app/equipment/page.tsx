@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { desc } from "drizzle-orm";
 import { db } from "@/db";
 import { equipmentRequests } from "@/db/schema";
@@ -11,7 +12,8 @@ export const metadata = { title: "Pengadaan Equipment - Stokify" };
 
 export default async function EquipmentPage() {
   const user = await getCurrentUser();
-  const role: Role = user?.role ?? "ADMIN_PUSAT";
+  if (!user) redirect("/logout");
+  const role: Role = user.role;
 
   const requests = await db
     .select()

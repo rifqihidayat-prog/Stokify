@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const sessionCookie = request.cookies.get("stokify_session");
-  const isAuthenticated = Boolean(sessionCookie?.value);
+  // Cek tanda tangan cookie (bukan sekadar ada/tidaknya cookie).
+  // Keberadaan user di database dicek lagi oleh getCurrentUser() di server.
+  const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+  const isAuthenticated = session !== null;
 
   // Jika belum login dan mengakses halaman yang dilindungi
   if (!isAuthenticated && pathname !== "/login") {

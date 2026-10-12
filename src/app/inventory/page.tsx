@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -10,7 +11,8 @@ export const metadata = { title: "Stok & Inventaris Logistik - Stokify" };
 
 export default async function InventoryPage() {
   const user = await getCurrentUser();
-  const role: Role = user?.role ?? "ADMIN_PUSAT";
+  if (!user) redirect("/logout");
+  const role: Role = user.role;
 
   // Dynamic No-Beginning-Stock calculations
   const [centralItems, storeGroups, allProducts] = await Promise.all([

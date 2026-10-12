@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { products, storeRequests, mutationLogs, storeStocks, type StoreRequest, type Product } from "@/db/schema";
 import { fail, ok, type ActionResult } from "./types";
+import { authorize, canAccessStore, isAdmin, requireUser, resolveStoreName } from "@/lib/authz";
 
 const VALID_STATUSES = ["PENDING", "APPROVED", "SHIPPED", "RECEIVED", "REJECTED"] as const;
 type RequestStatus = (typeof VALID_STATUSES)[number];
@@ -21,6 +22,7 @@ export interface StoreRequestWithProduct extends StoreRequest {
 }
 
 export async function getStoreRequests(): Promise<StoreRequestWithProduct[]> {
+  await requireUser();
   const rows = await db
     .select({
       request: storeRequests,
@@ -57,6 +59,7 @@ export interface PickingListItem {
  * Mengambil daftar permintaan toko aktif (PENDING / APPROVED) lengkap dengan SKU dan nama barang
  */
 export async function getPickingList(): Promise<PickingListItem[]> {
+  await requireUser();
   const allRequests = await getStoreRequests();
   return allRequests
     .filter((r) => r.status === "PENDING" || r.status === "APPROVED")
@@ -85,9 +88,14 @@ export async function createMultiItemStoreRequest(data: {
   items: { productId: string; quantity: number }[];
   notes?: string;
 }): Promise<ActionResult> {
-  const { storeName, items, notes } = data;
+  const auth = await authorize();
+  if (auth.error) return auth.error;
 
-  if (!storeName?.trim()) return fail("Nama toko wajib diisi.");
+  const { items, notes } = data;
+  // Staf Toko selalu mengajukan atas nama tokonya sendiri
+  const storeName = resolveStoreName(auth.user, data.storeName);
+
+  if (!storeName) return fail("Nama toko wajib diisi.");
   if (!items || items.length === 0) return fail("Tambahkan minimal 1 item pengajuan.");
 
   const allProducts = await db.select().from(products).all();
@@ -146,6 +154,9 @@ export async function createMultiItemStoreRequest(data: {
  * Approve request -> Potong stok pusat & terbitkan transaksi Surat Jalan (SJ) di log mutasi.
  */
 export async function approveStoreRequest(requestId: string): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   const request = await db
     .select()
     .from(storeRequests)
@@ -242,6 +253,9 @@ export async function approveStoreRequest(requestId: string): Promise<ActionResu
 }
 
 export async function rejectStoreRequest(requestId: string): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   const request = await db
     .select()
     .from(storeRequests)
@@ -266,7 +280,15 @@ export async function updateRequestStatus(
   requestId: string,
   status: string
 ): Promise<ActionResult> {
+  const auth = await authorize();
+  if (auth.error) return auth.error;
+
   if (!VALID_STATUSES.includes(status as RequestStatus)) return fail("Status tidak valid.");
+  // APPROVED / REJECTED wajib lewat approveStoreRequest / rejectStoreRequest
+  // agar potong stok & surat jalan tidak terlewati.
+  if (status !== "SHIPPED" && status !== "RECEIVED") {
+    return fail("Gunakan tombol Approve / Reject untuk mengubah status ini.");
+  }
 
   const request = await db
     .select()
@@ -276,6 +298,12 @@ export async function updateRequestStatus(
 
   if (!request) return fail("Pengajuan tidak ditemukan.");
 
+  if (status === "SHIPPED" && !isAdmin(auth.user)) {
+    return fail("Hanya Admin Pusat yang dapat menandai pengiriman.");
+  }
+  if (status === "RECEIVED" && !canAccessStore(auth.user, request.store_name)) {
+    return fail("Anda hanya dapat mengonfirmasi penerimaan untuk toko Anda sendiri.");
+  }
   if (status === "SHIPPED" && request.status !== "APPROVED") {
     return fail("Pengajuan harus di-approve dulu sebelum dikirim.");
   }
@@ -297,6 +325,9 @@ export async function updateRequestStatus(
  * Admin Pusat menghapus riwayat pengajuan stok toko.
  */
 export async function deleteStoreRequest(requestId: string): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   if (!requestId) return fail("ID pengajuan tidak valid.");
 
   const request = await db

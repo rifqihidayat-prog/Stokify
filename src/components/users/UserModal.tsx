@@ -247,7 +247,7 @@ export function UserModal({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={isEdit ? "Kosongkan bila tetap" : "Minimal 4 karakter"}
+                placeholder={isEdit ? "Kosongkan bila tetap" : "Minimal 8 karakter"}
                 required={!isEdit}
                 disabled={isLoading}
                 className="w-full rounded-xl border border-white/[0.08] bg-[#0A0D14] pl-10 pr-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 transition-all focus:border-amber-400/50 focus:bg-[#0E121B] focus:outline-none focus:ring-2 focus:ring-amber-400/20"

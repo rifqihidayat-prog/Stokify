@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { getDashboardStats } from "@/actions/dashboard";
@@ -11,7 +12,8 @@ export const metadata = { title: "Dashboard Logistik - Stokify" };
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
-  const role: Role = user?.role ?? "ADMIN_PUSAT";
+  if (!user) redirect("/logout");
+  const role: Role = user.role;
 
   const [stats, pickingItems, allProducts] = await Promise.all([
     getDashboardStats(),

@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { equipmentRequests } from "@/db/schema";
 import { fail, ok, type ActionResult } from "./types";
+import { authorize, canAccessStore, isAdmin, resolveStoreName } from "@/lib/authz";
+import { saveUploadedImage } from "@/lib/uploads";
 
 const URGENCIES = ["LOW", "MEDIUM", "HIGH"] as const;
 const REASONS = ["DAMAGED_REPLACEMENT", "NEW_PROCUREMENT"] as const;
@@ -19,7 +21,11 @@ export async function createEquipmentRequest(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const storeName = String(formData.get("store_name") ?? "").trim();
+  const auth = await authorize();
+  if (auth.error) return auth.error;
+
+  // Staf Toko selalu mengajukan atas nama tokonya sendiri
+  const storeName = resolveStoreName(auth.user, String(formData.get("store_name") ?? ""));
   const equipmentName = String(formData.get("equipment_name") ?? "").trim();
   const reason = String(formData.get("reason") ?? "DAMAGED_REPLACEMENT");
   const quantity = Number(formData.get("quantity") ?? 1);
@@ -39,8 +45,10 @@ export async function createEquipmentRequest(
     return fail("Level urgensi tidak valid.");
 
   let imageUrl: string | null = null;
-  if (image instanceof File && image.name) {
-    imageUrl = `/uploads/${encodeURIComponent(image.name)}`;
+  if (image instanceof File && image.size > 0) {
+    const saved = await saveUploadedImage(image);
+    if (!saved.ok) return fail(saved.message);
+    imageUrl = saved.url;
   }
 
   await db.insert(equipmentRequests).values({
@@ -72,6 +80,9 @@ export async function updateEquipmentRequestStatus(
   requestId: string,
   status: string
 ): Promise<ActionResult> {
+  const auth = await authorize();
+  if (auth.error) return auth.error;
+
   if (!STATUSES.includes(status as (typeof STATUSES)[number]))
     return fail("Status tidak valid.");
 
@@ -82,6 +93,25 @@ export async function updateEquipmentRequestStatus(
     .get();
 
   if (!request) return fail("Pengajuan tidak ditemukan.");
+
+  // Alur status: PENDING -> APPROVED/REJECTED -> ORDERED -> COMPLETED.
+  // Hanya Admin Pusat yang memutuskan; toko hanya mengonfirmasi barang diterima.
+  const allowedFrom: Record<string, string> = {
+    APPROVED: "PENDING",
+    REJECTED: "PENDING",
+    ORDERED: "APPROVED",
+    COMPLETED: "ORDERED",
+  };
+  if (allowedFrom[status] !== request.status) {
+    return fail(`Status "${request.status}" tidak dapat diubah menjadi "${status}".`);
+  }
+  if (status === "COMPLETED") {
+    if (!canAccessStore(auth.user, request.store_name)) {
+      return fail("Anda hanya dapat mengonfirmasi penerimaan untuk toko Anda sendiri.");
+    }
+  } else if (!isAdmin(auth.user)) {
+    return fail("Hanya Admin Pusat yang dapat memproses pengajuan equipment.");
+  }
 
   await db
     .update(equipmentRequests)

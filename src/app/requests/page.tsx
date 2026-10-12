@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -11,7 +12,8 @@ export const metadata = { title: "Permintaan Toko & Picking List - Stokify" };
 
 export default async function RequestsPage() {
   const user = await getCurrentUser();
-  const role: Role = user?.role ?? "ADMIN_PUSAT";
+  if (!user) redirect("/logout");
+  const role: Role = user.role;
 
   const [allProducts, requests] = await Promise.all([
     db.select().from(products).all(),

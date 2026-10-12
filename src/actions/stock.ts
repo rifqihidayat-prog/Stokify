@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { fail, ok, type ActionResult } from "./types";
+import { authorize } from "@/lib/authz";
 
 /**
  * Admin Pusat memperbarui stok fisik & ambang batas minimum stok pusat.
@@ -14,6 +15,9 @@ export async function updateCentralStock(
   newStock: number,
   newMinStock: number
 ): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   if (!productId) return fail("Produk tidak ditemukan.");
 
   const stock = Number(newStock);
@@ -51,6 +55,9 @@ export async function updateCentralStock(
  * Jika item memiliki riwayat pengajuan, batalkan atau hapus relasi dengan aman.
  */
 export async function deleteCentralProduct(productId: string): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   if (!productId) return fail("ID produk tidak valid.");
 
   const product = await db

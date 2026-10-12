@@ -8,6 +8,8 @@ import { users, type User } from "@/db/schema";
 import { getCurrentUser } from "./auth";
 import { ok, fail, type ActionResult } from "./types";
 import type { Role } from "@/lib/utils";
+import { requireUser } from "@/lib/authz";
+import { MIN_PASSWORD_LENGTH, hashPassword } from "@/lib/password";
 
 export interface SafeUser {
   id: string;
@@ -40,6 +42,7 @@ export interface UpdateUserInput {
  * Mengambil daftar seluruh pengguna terdaftar
  */
 export async function getUsers(): Promise<SafeUser[]> {
+  await requireUser("ADMIN_PUSAT");
   const rows = await db
     .select({
       id: users.id,
@@ -79,7 +82,8 @@ export async function createUser(input: CreateUserInput): Promise<ActionResult> 
     return fail("Username hanya boleh berisi huruf, angka, titik, strip, dan underscore.");
   }
   if (!password) return fail("Kata sandi wajib diisi.");
-  if (password.length < 4) return fail("Kata sandi minimal 4 karakter.");
+  if (password.length < MIN_PASSWORD_LENGTH)
+    return fail(`Kata sandi minimal ${MIN_PASSWORD_LENGTH} karakter.`);
   if (!name) return fail("Nama lengkap pengguna wajib diisi.");
   if (!storeName) return fail("Penugasan toko / gudang wajib diisi.");
 
@@ -98,7 +102,7 @@ export async function createUser(input: CreateUserInput): Promise<ActionResult> 
     await db.insert(users).values({
       id: randomUUID(),
       username,
-      password,
+      password: await hashPassword(password),
       name,
       email,
       role,
@@ -160,8 +164,9 @@ export async function updateUser(
     };
 
     if (password && password.length > 0) {
-      if (password.length < 4) return fail("Kata sandi baru minimal 4 karakter.");
-      updateValues.password = password;
+      if (password.length < MIN_PASSWORD_LENGTH)
+        return fail(`Kata sandi baru minimal ${MIN_PASSWORD_LENGTH} karakter.`);
+      updateValues.password = await hashPassword(password);
     }
 
     await db.update(users).set(updateValues).where(eq(users.id, id));

@@ -23,7 +23,7 @@ Dokumen ini dirancang khusus sebagai panduan representatif, presisi, dan kompreh
    - Pelacakan alur pengadaan: `PENDING` $\to$ `APPROVED` $\to$ `ORDERED` (Sedang Dipesan/Dibeli) $\to$ `COMPLETED` (Diterima Toko).
 
 ### Aktor Sistem (Role)
-Aplikasi menggunakan sistem *role-switching* interaktif berbasis Cookie (`stokify_role`):
+Role berasal dari akun yang login (tabel `users`). Lihat **Keamanan** di bawah untuk sesi & otorisasi:
 - **`ADMIN_PUSAT` (Gudang / Kantor Pusat)**:
   - Mengelola master data stok pusat (update jumlah stok aktual dan minimum stok aman di `/inventory`).
   - Me-review pengajuan stok barang toko (`APPROVE` atau `REJECT`).
@@ -77,12 +77,14 @@ Stokify/
     │   ├── equipment.ts      # Pengajuan pembelian equipment & update status pengadaan
     │   ├── repairs.ts        # Re-export / backward-compatibility wrapper ke equipment.ts
     │   ├── requests.ts       # Pengajuan restock, approval, deduksi stok otomatis, tracking
-    │   ├── role.ts           # Simulasi switch role via cookies ("stokify_role")
+    │   ├── auth.ts           # Login (password ter-hash), logout, getCurrentUser dari sesi bertanda tangan
+    │   ├── users.ts          # CRUD akun pengguna (Admin Pusat)
+    │   ├── sync.ts           # Sinkronisasi master produk dari Google Sheet (Admin Pusat)
     │   ├── stock.ts          # Update stok aktual & ambang batas min stok pusat
     │   └── types.ts          # Standard Action Result format { ok: boolean, message: string }
     ├── app/                  # Next.js App Router (Page routes & layouts)
     │   ├── globals.css       # Tailwind base, antialiased, scrollbar styling
-    │   ├── layout.tsx        # Root layout, membaca cookie role, AppShell provider
+    │   ├── layout.tsx        # Root layout, membaca user login, AppShell provider
     │   ├── page.tsx          # Route '/' -> Dashboard statistik & grafik stok
     │   ├── equipment/
     │   │   └── page.tsx      # Route '/equipment' -> Pengajuan Pengadaan Equipment
@@ -321,8 +323,13 @@ export type ActionResult =
   - Dilengkapi proteksi error jika ada foreign key constraint riwayat pengajuan toko.
   - Revalidasi path: `"/inventory"`, `"/requests"`, `"/"`.
 
-### 6.5. Role Actions (`src/actions/role.ts`)
-- **`setRole(role: string): Promise<ActionResult>`**: Mengubah cookie `stokify_role` (30 hari).
+### 6.5. Keamanan (Sesi & Otorisasi)
+- **Sesi**: cookie `stokify_session` berisi `{uid, exp}` bertanda tangan HMAC-SHA256 (`src/lib/session.ts`, kunci dari env `SESSION_SECRET`). Middleware memverifikasi tanda tangan; `getCurrentUser()` membaca ulang user dari database.
+- **Password**: disimpan sebagai hash scrypt (`src/lib/password.ts`), minimal 8 karakter. Password plaintext lama otomatis di-hash saat login berhasil. Login dikunci 15 menit setelah 10 kali gagal per username.
+- **Otorisasi wajib di server**: setiap server action memanggil `authorize()` / `requireUser()` dari `src/lib/authz.ts`. Jangan mengandalkan penyembunyian tombol di UI. Aksi pusat (approve/reject, inflow supplier, surat jalan, adjustment pusat, rollback, ubah/hapus master, sync sheet, kelola user) hanya `ADMIN_PUSAT`.
+- **Scope toko**: untuk `STAF_TOKO`, nama toko selalu diambil dari akunnya (`resolveStoreName`), bukan dari input client. Konfirmasi `RECEIVED` / `COMPLETED` hanya untuk toko sendiri.
+- **Foto lampiran**: disimpan di `DATA_DIR/uploads/<uuid>.<ext>` (JPG/PNG/WEBP/GIF, maks 8 MB, dicek dari isi file) dan disajikan oleh `src/app/uploads/[file]/route.ts` hanya untuk user yang login.
+- **Bootstrap DB**: `src/instrumentation.ts` → `src/db/bootstrap.ts` membuat tabel bila belum ada dan admin pertama dari `INITIAL_ADMIN_PASSWORD` bila tabel `users` kosong. Tidak menghapus data.
 
 ### 6.6. Dashboard Actions (`src/actions/dashboard.ts`)
 - **`getDashboardStats(): Promise<DashboardStats>`**:
@@ -339,8 +346,11 @@ npm run dev
 # Sinkronisasi Skema ke SQLite / Turso
 npm run db:push
 
-# Seeding Data Awal (Idempotent)
+# Seeding Data DEMO (HANYA lokal; menghapus semua tabel; ditolak bila NODE_ENV=production
+# atau bila database sudah berisi user). Password akun demo: "password".
 npm run db:seed
+# Paksa reset database lokal ke data demo
+npm run db:reset-demo
 
 # Drizzle Studio GUI
 npm run db:studio
@@ -349,3 +359,9 @@ npm run db:studio
 npm run build
 npm run start
 ```
+
+### Deployment (Docker / Dokploy)
+- `Dockerfile` membangun output `standalone`. Data (SQLite + uploads) ada di volume `/app/data`.
+- Env wajib: `SESSION_SECRET` (min 32 karakter), `INITIAL_ADMIN_PASSWORD` (hanya dipakai saat users kosong). Default di image: `DATABASE_URL=file:/app/data/stokify.db`, `DATA_DIR=/app/data`.
+- **Jangan** isi secret di `.env` — file itu ikut ter-commit ke repo.
+

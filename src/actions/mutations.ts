@@ -12,6 +12,7 @@ import {
   type Product,
 } from "@/db/schema";
 import { fail, ok, type ActionResult } from "./types";
+import { authorize, requireUser, resolveStoreName } from "@/lib/authz";
 
 export interface CentralStockCardItem {
   id: string;
@@ -64,6 +65,7 @@ function generateRef(prefix: string): string {
  * WAJIB menampilkan SELURUH barang dari Master Barang, meskipun stoknya 0.
  */
 export async function getCentralStockCard(filters?: DateFilter): Promise<CentralStockCardItem[]> {
+  await requireUser();
   const allProducts = await db.select().from(products).all();
   const allLogs = await db.select().from(mutationLogs).all();
 
@@ -128,6 +130,7 @@ export async function getCentralStockCard(filters?: DateFilter): Promise<Central
  * Stok Keluar (-): MURNI akumulasi transaksi CLOSING Toko.
  */
 export async function getStoreStockCards(filters?: DateFilter): Promise<StoreStockGroup[]> {
+  await requireUser();
   const allProducts = await db.select().from(products).all();
   const allLogs = await db.select().from(mutationLogs).all();
 
@@ -234,6 +237,9 @@ export async function createSupplierInflow(data: {
   items?: SupplierInflowItem[];
   notes?: string;
 }): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   const { supplierName, itemId, qty, items, notes } = data;
   if (!supplierName?.trim()) return fail("Nama supplier/vendor wajib diisi.");
 
@@ -322,6 +328,9 @@ export async function createStoreTransfer(data: {
   items: { itemId: string; qty: number }[];
   notes?: string;
 }): Promise<{ ok: boolean; message: string; refNo?: string }> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   const { storeName, items, notes } = data;
   if (!storeName?.trim()) return { ok: false, message: "Pilih toko tujuan pengiriman." };
   if (!items || items.length === 0) return { ok: false, message: "Tambahkan minimal 1 baris barang." };
@@ -417,8 +426,13 @@ export async function createStoreDailyClosing(data: {
   items: { itemId: string; qtyUsed: number }[];
   notes?: string;
 }): Promise<ActionResult> {
-  const { storeName, items, notes } = data;
-  if (!storeName?.trim()) return fail("Nama toko wajib disertakan.");
+  const auth = await authorize();
+  if (auth.error) return auth.error;
+
+  const { items, notes } = data;
+  // Staf Toko hanya boleh closing untuk tokonya sendiri
+  const storeName = resolveStoreName(auth.user, data.storeName);
+  if (!storeName) return fail("Nama toko wajib disertakan.");
   if (!items || items.length === 0) return fail("Tambahkan minimal 1 baris item closing.");
 
   const refNo = generateRef("CLOSING");
@@ -474,8 +488,13 @@ export async function createStoreAdjustment(data: {
   qtyAdjusted: number;
   reason: string;
 }): Promise<ActionResult> {
-  const { storeName, itemId, qtyAdjusted, reason } = data;
-  if (!storeName?.trim()) return fail("Nama toko wajib diisi.");
+  const auth = await authorize();
+  if (auth.error) return auth.error;
+
+  const { itemId, qtyAdjusted, reason } = data;
+  // Staf Toko hanya boleh adjustment untuk tokonya sendiri
+  const storeName = resolveStoreName(auth.user, data.storeName);
+  if (!storeName) return fail("Nama toko wajib diisi.");
   if (!itemId) return fail("Pilih barang yang disesuaikan.");
   if (!qtyAdjusted || !Number.isInteger(qtyAdjusted)) return fail("Nilai penyesuaian harus berupa angka bulat.");
   if (!reason?.trim()) return fail("Alasan / keterangan adjustment wajib diisi untuk keperluan audit.");
@@ -536,6 +555,9 @@ export async function createCentralAdjustment(data: {
   qtyAdjusted: number;
   reason: string;
 }): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   const { itemId, qtyAdjusted, reason } = data;
   if (!itemId) return fail("Pilih barang master.");
   if (!qtyAdjusted || !Number.isInteger(qtyAdjusted)) return fail("Nilai penyesuaian harus angka bulat.");
@@ -608,6 +630,7 @@ export async function getMutationLedger(
   pageSize: number;
   totalPages: number;
 }> {
+  await requireUser();
   const allLogs = await db
     .select({
       log: mutationLogs,
@@ -711,6 +734,9 @@ export async function getAuditAdjustments(
  * Menghapus baris mutasi dan mengembalikan efek stok ke kondisi sebelumnya.
  */
 export async function rollbackMutation(logId: string): Promise<ActionResult> {
+  const auth = await authorize("ADMIN_PUSAT");
+  if (auth.error) return auth.error;
+
   if (!logId) return fail("ID mutasi tidak valid.");
 
   const log = await db.select().from(mutationLogs).where(eq(mutationLogs.id, logId)).get();

@@ -16,7 +16,7 @@ export default async function UsersPage() {
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
-    redirect("/login");
+    redirect("/logout");
   }
 
   // Jika akun adalah staf toko, batasi akses

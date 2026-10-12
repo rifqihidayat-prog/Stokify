@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LedgerHub } from "@/components/ledger/LedgerHub";
 import { getMutationLedger, getAuditAdjustments } from "@/actions/mutations";
@@ -8,7 +9,8 @@ export const metadata = { title: "Buku Kas Mutasi & Ledger - Stokify" };
 
 export default async function LedgerPage() {
   const user = await getCurrentUser();
-  const role: Role = user?.role ?? "ADMIN_PUSAT";
+  if (!user) redirect("/logout");
+  const role: Role = user.role;
 
   // Fetch verified ledger logs (Descending) & audit logs
   const [ledgerData, auditData] = await Promise.all([

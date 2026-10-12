@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { products, storeRequests, equipmentRequests, mutationLogs } from "@/db/schema";
 import { getCentralStockCard, type CentralStockCardItem, type DateFilter } from "./mutations";
 import { getStockStatus, type StockLevel } from "@/lib/utils";
+import { requireUser } from "@/lib/authz";
 
 export type DashboardStats = {
   totalItems: number;
@@ -39,6 +40,7 @@ export type LowStockItem = {
 };
 
 export async function getDashboardStats(filters?: DateFilter): Promise<DashboardStats> {
+  await requireUser();
   const centralCardItems = await getCentralStockCard(filters);
   const requests = await db.select().from(storeRequests).all();
   const equipment = await db.select().from(equipmentRequests).all();
