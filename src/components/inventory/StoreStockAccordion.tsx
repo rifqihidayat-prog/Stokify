@@ -22,8 +22,14 @@ export function StoreStockAccordion({
   onOpenAdjustment,
   onOpenRequest,
 }: StoreStockAccordionProps) {
-  // CRITICAL RULE: Entire accordion MUST BE COLLAPSED (TERTUTUP) by default!
-  const [openStores, setOpenStores] = useState<Record<string, boolean>>({});
+  // Untuk Admin Pusat: accordion tertutup secara default.
+  // Untuk Staf Toko (hanya toko miliknya sendiri): otomatis terbuka agar stok langsung terlihat.
+  const [openStores, setOpenStores] = useState<Record<string, boolean>>(() => {
+    if ((role === "STAF_TOKO" || stores.length === 1) && stores[0]) {
+      return { [stores[0].store_name]: true };
+    }
+    return {};
+  });
 
   const toggleStore = (storeName: string) => {
     setOpenStores((prev) => ({
@@ -36,9 +42,15 @@ export function StoreStockAccordion({
     return (
       <div className="rounded-2xl border border-zinc-800 bg-[#15181E] p-8 text-center text-zinc-400">
         <Store className="mx-auto h-8 w-8 text-zinc-600 mb-2" />
-        <p className="text-sm font-medium text-zinc-300">Belum ada data stok toko cabang</p>
+        <p className="text-sm font-medium text-zinc-300">
+          {role === "STAF_TOKO"
+            ? "Belum ada data stok fisik untuk toko Anda"
+            : "Belum ada data stok toko cabang"}
+        </p>
         <p className="text-xs text-zinc-500 mt-1">
-          Kirim barang melalui menu Kirim Stok untuk memulai alokasi cabang.
+          {role === "STAF_TOKO"
+            ? "Stok fisik akan bertambah otomatis saat barang dikirim dari Gudang Pusat melalui Surat Jalan."
+            : "Kirim barang melalui menu Kirim Stok untuk memulai alokasi cabang."}
         </p>
       </div>
     );

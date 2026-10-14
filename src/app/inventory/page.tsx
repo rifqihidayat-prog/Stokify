@@ -14,9 +14,11 @@ export default async function InventoryPage() {
   if (!user) redirect("/logout");
   const role: Role = user.role;
 
-  // Dynamic No-Beginning-Stock calculations
+  // Dynamic No-Beginning-Stock calculations:
+  // Admin Pusat melihat stok pusat & seluruh toko.
+  // Staf Toko HANYA melihat stok tokonya sendiri (tidak melihat stok pusat atau toko lain).
   const [centralItems, storeGroups, allProducts] = await Promise.all([
-    getCentralStockCard(),
+    role === "ADMIN_PUSAT" ? getCentralStockCard() : Promise.resolve([]),
     getStoreStockCards(),
     db.select().from(products).all(),
   ]);
@@ -26,15 +28,23 @@ export default async function InventoryPage() {
     sku: p.sku,
     name: p.name,
     unit: p.unit,
-    current_stock: p.current_stock_central,
+    current_stock: role === "ADMIN_PUSAT" ? p.current_stock_central : undefined,
     is_orderable: p.is_orderable,
   }));
 
   return (
     <>
       <PageHeader
-        title="Manajemen Stok Pusat & Multi-Store"
-        subtitle="Monitoring saldo realtime berbasis mutasi transaksi ledger (No-Beginning-Stock Model)."
+        title={
+          role === "ADMIN_PUSAT"
+            ? "Manajemen Stok Pusat & Multi-Store"
+            : `Stok Toko - ${user.store_name}`
+        }
+        subtitle={
+          role === "ADMIN_PUSAT"
+            ? "Monitoring saldo realtime berbasis mutasi transaksi ledger (No-Beginning-Stock Model)."
+            : `Monitoring saldo fisik realtime untuk ${user.store_name}.`
+        }
       />
 
       <InventoryHub
@@ -42,6 +52,7 @@ export default async function InventoryPage() {
         storeGroups={storeGroups}
         autocompleteProducts={autocompleteProducts}
         role={role}
+        user={user}
       />
     </>
   );

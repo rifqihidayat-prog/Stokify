@@ -131,35 +131,42 @@ export async function getCentralStockCard(filters?: DateFilter): Promise<Central
  * Stok Keluar (-): MURNI akumulasi transaksi CLOSING Toko.
  */
 export async function getStoreStockCards(filters?: DateFilter): Promise<StoreStockGroup[]> {
-  await requireUser();
+  const currentUser = await requireUser();
   const allProducts = await db.select().from(products).all();
   const allLogs = await db.select().from(mutationLogs).all();
   const allStoreStocks = await db.select().from(storeStocks).all();
   const allUsers = await db.select().from(users).all();
 
-  // Ambil daftar toko unik dari sender/receiver, store_stocks, dan user role STAF_TOKO
+  // Ambil daftar toko unik: untuk STAF_TOKO HANYA toko miliknya sendiri
   const storeNames = new Set<string>();
-  allLogs.forEach((l) => {
-    if (l.receiver_location && !["GUDANG PUSAT", "CLOSING"].includes(l.receiver_location) && !l.receiver_location.startsWith("SUPPLIER")) {
-      storeNames.add(l.receiver_location);
-    }
-    if (l.sender_location && !["GUDANG PUSAT", "CLOSING"].includes(l.sender_location) && !l.sender_location.startsWith("SUPPLIER")) {
-      storeNames.add(l.sender_location);
-    }
-  });
-  allStoreStocks.forEach((s) => {
-    if (s.store_name) storeNames.add(s.store_name);
-  });
-  allUsers.forEach((u) => {
-    if (u.role === "STAF_TOKO" && u.store_name) {
-      storeNames.add(u.store_name);
-    }
-  });
 
-  // Default pastikan toko cabang utama ada
-  if (storeNames.size === 0) {
-    storeNames.add("Toko Cabang Surabaya");
-    storeNames.add("Toko Cabang Bandung");
+  if (currentUser.role === "STAF_TOKO") {
+    if (currentUser.store_name) {
+      storeNames.add(currentUser.store_name);
+    }
+  } else {
+    allLogs.forEach((l) => {
+      if (l.receiver_location && !["GUDANG PUSAT", "CLOSING"].includes(l.receiver_location) && !l.receiver_location.startsWith("SUPPLIER")) {
+        storeNames.add(l.receiver_location);
+      }
+      if (l.sender_location && !["GUDANG PUSAT", "CLOSING"].includes(l.sender_location) && !l.sender_location.startsWith("SUPPLIER")) {
+        storeNames.add(l.sender_location);
+      }
+    });
+    allStoreStocks.forEach((s) => {
+      if (s.store_name) storeNames.add(s.store_name);
+    });
+    allUsers.forEach((u) => {
+      if (u.role === "STAF_TOKO" && u.store_name) {
+        storeNames.add(u.store_name);
+      }
+    });
+
+    // Default pastikan toko cabang utama ada
+    if (storeNames.size === 0) {
+      storeNames.add("Toko Cabang Surabaya");
+      storeNames.add("Toko Cabang Bandung");
+    }
   }
 
   const result: StoreStockGroup[] = [];
@@ -202,8 +209,8 @@ export async function getStoreStockCards(filters?: DateFilter): Promise<StoreSto
         (s) => s.store_name === storeName && s.item_id === prod.id
       );
 
-      // Tampilkan jika barang ini pernah dikirim, ada mutasi, atau terdaftar di store_stocks
-      if (stok_masuk > 0 || stok_keluar > 0 || sisa_stok_realtime > 0 || isStoreItem) {
+      // Tampilkan jika barang ini pernah dikirim, ada mutasi, terdaftar di store_stocks, atau jika akun staf toko
+      if (stok_masuk > 0 || stok_keluar > 0 || sisa_stok_realtime > 0 || isStoreItem || currentUser.role === "STAF_TOKO") {
         let status: "KRITIS" | "WARNING" | "AMAN" = "AMAN";
         if (sisa_stok_realtime <= prod.min_stock_store) {
           status = "KRITIS";
@@ -445,6 +452,12 @@ export async function createStoreDailyClosing(data: {
 
   const { items, notes } = data;
   // Staf Toko hanya boleh closing untuk tokonya sendiri
+  if (auth.user.role === "STAF_TOKO") {
+    if (data.storeName && data.storeName.trim() !== auth.user.store_name) {
+      return fail(`Anda hanya dapat mencatat closing untuk toko Anda sendiri (${auth.user.store_name}).`);
+    }
+  }
+
   const storeName = resolveStoreName(auth.user, data.storeName);
   if (!storeName) return fail("Nama toko wajib disertakan.");
   if (!items || items.length === 0) return fail("Tambahkan minimal 1 baris item closing.");

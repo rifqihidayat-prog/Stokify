@@ -49,6 +49,13 @@ export function Sidebar({
     await logoutUser();
   };
 
+  const navItems = BASE_NAV.map((item) => {
+    if (item.href === "/inventory" && user.role === "STAF_TOKO") {
+      return { ...item, label: "Stok Toko" };
+    }
+    return item;
+  });
+
   return (
     <aside
       className={cn(
@@ -81,7 +88,7 @@ export function Sidebar({
 
       {/* Navigation Links */}
       <nav className="flex-1 space-y-1.5 overflow-y-auto px-3 py-4">
-        {BASE_NAV.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link

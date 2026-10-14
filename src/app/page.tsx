@@ -37,7 +37,7 @@ export default async function DashboardPage() {
         subtitle={
           role === "ADMIN_PUSAT"
             ? `Pusat komando monitoring stok real-time, penerimaan supplier, surat jalan, dan audit opname cabang. (Masuk sebagai ${user?.name || "Admin"})`
-            : `Portal operasional toko: pengajuan kebutuhan barang ke pusat, input closing, dan opname fisik untuk ${user?.store_name || "Toko Cabang"}.`
+            : `Portal operasional toko: pengajuan kebutuhan barang ke pusat dan input closing harian untuk ${user?.store_name || "Toko Cabang"}.`
         }
       />
 
