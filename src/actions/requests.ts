@@ -21,17 +21,108 @@ export interface StoreRequestWithProduct extends StoreRequest {
   product: Product;
 }
 
+export interface StoreBookingDetail {
+  storeName: string;
+  quantity: number;
+}
+
+export interface ProductBookedInfo {
+  productId: string;
+  totalBooked: number;
+  otherStoresBooked: number;
+  breakdownOther: StoreBookingDetail[];
+  breakdownAll: StoreBookingDetail[];
+  otherBreakdownText: string;
+  allBreakdownText: string;
+}
+
+export type BookedStockMap = Record<string, ProductBookedInfo>;
+
+/**
+ * Menghitung stok yang sedang ter-booked (berstatus PENDING) oleh toko lain maupun seluruh toko.
+ */
+export async function getBookedStockMap(currentUserStoreName?: string): Promise<BookedStockMap> {
+  const pendingRequests = await db
+    .select()
+    .from(storeRequests)
+    .where(eq(storeRequests.status, "PENDING"))
+    .all();
+
+  const map: BookedStockMap = {};
+
+  for (const req of pendingRequests) {
+    if (!map[req.product_id]) {
+      map[req.product_id] = {
+        productId: req.product_id,
+        totalBooked: 0,
+        otherStoresBooked: 0,
+        breakdownOther: [],
+        breakdownAll: [],
+        otherBreakdownText: "",
+        allBreakdownText: "",
+      };
+    }
+
+    const item = map[req.product_id];
+    item.totalBooked += req.quantity_requested;
+
+    // Breakdown all
+    const existingStoreAll = item.breakdownAll.find(
+      (b) => b.storeName.toLowerCase() === req.store_name.toLowerCase()
+    );
+    if (existingStoreAll) {
+      existingStoreAll.quantity += req.quantity_requested;
+    } else {
+      item.breakdownAll.push({ storeName: req.store_name, quantity: req.quantity_requested });
+    }
+
+    // Breakdown other stores
+    const isOther =
+      !currentUserStoreName ||
+      req.store_name.toLowerCase().trim() !== currentUserStoreName.toLowerCase().trim();
+
+    if (isOther) {
+      item.otherStoresBooked += req.quantity_requested;
+      const existingStoreOther = item.breakdownOther.find(
+        (b) => b.storeName.toLowerCase() === req.store_name.toLowerCase()
+      );
+      if (existingStoreOther) {
+        existingStoreOther.quantity += req.quantity_requested;
+      } else {
+        item.breakdownOther.push({ storeName: req.store_name, quantity: req.quantity_requested });
+      }
+    }
+  }
+
+  // Format ringkasan breakdown teks
+  for (const pid in map) {
+    const item = map[pid];
+    item.allBreakdownText = item.breakdownAll
+      .map((b) => `${b.storeName}: ${b.quantity}`)
+      .join(", ");
+    item.otherBreakdownText = item.breakdownOther
+      .map((b) => `${b.storeName}: ${b.quantity}`)
+      .join(", ");
+  }
+
+  return map;
+}
+
 export async function getStoreRequests(): Promise<StoreRequestWithProduct[]> {
-  await requireUser();
-  const rows = await db
+  const user = await requireUser();
+  const query = db
     .select({
       request: storeRequests,
       product: products,
     })
     .from(storeRequests)
     .innerJoin(products, eq(storeRequests.product_id, products.id))
-    .orderBy(desc(storeRequests.created_at))
-    .all();
+    .orderBy(desc(storeRequests.created_at));
+
+  const rows =
+    !isAdmin(user) && user.store_name
+      ? await query.where(eq(storeRequests.store_name, user.store_name)).all()
+      : await query.all();
 
   return rows.map(({ request, product }) => ({
     ...request,
@@ -115,16 +206,8 @@ export async function createMultiItemStoreRequest(data: {
       return fail(`Item "${prod.name}" sedang dinonaktifkan untuk pemesanan.`);
     }
 
-    // Proteksi stok pusat kosong
-    if (prod.current_stock_central <= 0) {
-      return fail(`Barang "${prod.name}" berstatus [STOK KOSONG PUSAT] dan tidak dapat dipesan.`);
-    }
-
-    if (row.quantity > prod.current_stock_central) {
-      return fail(
-        `Stok pusat "${prod.name}" hanya tersisa ${prod.current_stock_central} ${prod.unit}, tidak cukup untuk ${row.quantity}.`
-      );
-    }
+    // Catatan: Toko tetap diizinkan mengajukan pemesanan meskipun stok pusat sedang 0 atau telah di-booking oleh toko lain.
+    // Pengajuan akan masuk sebagai antrean berstatus PENDING di Pusat.
   }
 
   const refNo = generateRef("REQ");

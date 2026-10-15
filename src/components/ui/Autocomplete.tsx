@@ -11,6 +11,8 @@ export interface AutocompleteItem {
   unit: string;
   current_stock?: number;
   is_orderable?: boolean;
+  booked_stock?: number;
+  booked_details?: string;
 }
 
 interface AutocompleteProps {
@@ -219,6 +221,14 @@ export function Autocomplete({
                             )}
                           >
                             Stok Pusat: {item.current_stock} {item.unit}
+                          </span>
+                        </>
+                      )}
+                      {item.booked_stock !== undefined && item.booked_stock > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="font-medium text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 text-[11px]">
+                            Ter-booked: {item.booked_stock} {item.unit}
                           </span>
                         </>
                       )}

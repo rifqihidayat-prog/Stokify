@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { InventoryHub } from "@/components/inventory/InventoryHub";
 import { getCentralStockCard, getStoreStockCards } from "@/actions/mutations";
 import { getCurrentUser } from "@/actions/auth";
+import { autoSyncIfStale } from "@/actions/sync";
 import type { Role } from "@/lib/utils";
 
 export const metadata = { title: "Stok & Inventaris Logistik - Stokify" };
@@ -13,6 +14,9 @@ export default async function InventoryPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/logout");
   const role: Role = user.role;
+
+  // Lakukan auto-sync jika master data Google Sheets sudah lebih dari 2 menit belum diperbarui
+  await autoSyncIfStale();
 
   // Dynamic No-Beginning-Stock calculations:
   // Admin Pusat melihat stok pusat & seluruh toko.

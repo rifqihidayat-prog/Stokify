@@ -13,6 +13,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { SyncButton } from "./SyncButton";
 import { cn } from "@/lib/utils";
 import type { CentralStockCardItem } from "@/actions/mutations";
 import type { Role } from "@/lib/utils";
@@ -122,6 +123,8 @@ export function CentralStockCard({
                 Adjustment
               </Button>
             )}
+
+            <SyncButton />
           </div>
         )}
       </div>

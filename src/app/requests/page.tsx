@@ -4,8 +4,9 @@ import { products } from "@/db/schema";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RequestForm } from "@/components/requests/RequestForm";
 import { RequestList } from "@/components/requests/RequestList";
-import { getStoreRequests } from "@/actions/requests";
+import { getStoreRequests, getBookedStockMap } from "@/actions/requests";
 import { getCurrentUser } from "@/actions/auth";
+import { autoSyncIfStale } from "@/actions/sync";
 import type { Role } from "@/lib/utils";
 
 export const metadata = { title: "Permintaan Toko & Picking List - Stokify" };
@@ -15,9 +16,13 @@ export default async function RequestsPage() {
   if (!user) redirect("/logout");
   const role: Role = user.role;
 
-  const [allProducts, requests] = await Promise.all([
+  // Lakukan auto-sync jika master data Google Sheets sudah lebih dari 2 menit belum diperbarui
+  await autoSyncIfStale();
+
+  const [allProducts, requests, bookedStockMap] = await Promise.all([
     db.select().from(products).all(),
     getStoreRequests(),
+    getBookedStockMap(user?.store_name),
   ]);
 
   return (
@@ -36,6 +41,7 @@ export default async function RequestsPage() {
             products={allProducts}
             role={role}
             defaultStoreName={user?.store_name}
+            bookedStockMap={bookedStockMap}
           />
         )}
         <RequestList requests={requests} role={role} />
