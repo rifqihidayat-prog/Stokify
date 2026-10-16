@@ -107,11 +107,34 @@ export const equipmentRequests = sqliteTable("equipment_requests", {
     .defaultNow(),
 });
 
+export const purchaseRequestStatusEnum = ["PENDING", "COMPLETED", "CANCELLED"] as const;
+
+export const purchaseRequests = sqliteTable("purchase_requests", {
+  id: text("id").primaryKey(),
+  pr_number: text("pr_number").notNull().unique(),
+  product_id: text("product_id")
+    .references(() => products.id, { onDelete: "cascade" })
+    .notNull(),
+  quantity: integer("quantity").notNull(),
+  supplier_name: text("supplier_name"),
+  notes: text("notes"),
+  status: text("status", { enum: purchaseRequestStatusEnum })
+    .notNull()
+    .default("PENDING"),
+  created_by: text("created_by").notNull(),
+  created_at: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .defaultNow(),
+  completed_at: integer("completed_at", { mode: "timestamp" }),
+});
+
 export type Product = typeof products.$inferSelect;
 export type StoreStock = typeof storeStocks.$inferSelect;
 export type MutationLog = typeof mutationLogs.$inferSelect;
 export type StoreRequest = typeof storeRequests.$inferSelect;
 export type EquipmentRequest = typeof equipmentRequests.$inferSelect;
 export type RepairTicket = EquipmentRequest;
+export type PurchaseRequest = typeof purchaseRequests.$inferSelect;
+export type NewPurchaseRequest = typeof purchaseRequests.$inferInsert;
 
 

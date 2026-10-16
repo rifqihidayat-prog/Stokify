@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export type StockLevel = "KRITIS" | "WARNING" | "AMAN";
+export type StockLevel = "KRITIS" | "WARNING" | "AMAN" | "PR_CREATED";
 
 /**
  * Status stok pusat:

@@ -11,6 +11,7 @@ import { CentralAdjustmentModal } from "@/components/operations/CentralAdjustmen
 import { DailyClosingModal } from "@/components/operations/DailyClosingModal";
 import { StoreAdjustmentModal } from "@/components/operations/StoreAdjustmentModal";
 import type { CentralStockCardItem, StoreStockGroup } from "@/actions/mutations";
+import type { PurchaseRequestWithProduct } from "@/actions/purchase_requests";
 import type { AutocompleteItem } from "@/components/ui/Autocomplete";
 import type { AuthUser } from "@/actions/auth";
 import type { Role } from "@/lib/utils";
@@ -20,6 +21,7 @@ interface InventoryHubProps {
   centralItems: CentralStockCardItem[];
   storeGroups: StoreStockGroup[];
   autocompleteProducts: AutocompleteItem[];
+  activePRs?: PurchaseRequestWithProduct[];
   role: Role;
   user?: AuthUser;
 }
@@ -28,6 +30,7 @@ export function InventoryHub({
   centralItems,
   storeGroups,
   autocompleteProducts,
+  activePRs = [],
   role,
   user,
 }: InventoryHubProps) {
@@ -163,6 +166,7 @@ export function InventoryHub({
       {role === "ADMIN_PUSAT" && activeTab === "CENTRAL" && (
         <CentralStockCard
           items={centralItems}
+          activePurchaseRequests={activePRs}
           role={role}
           onOpenInflow={(itemId) => {
             setInflowInitialItemId(itemId);

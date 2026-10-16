@@ -4,6 +4,7 @@ import { products } from "@/db/schema";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { InventoryHub } from "@/components/inventory/InventoryHub";
 import { getCentralStockCard, getStoreStockCards } from "@/actions/mutations";
+import { getActivePurchaseRequests } from "@/actions/purchase_requests";
 import { getCurrentUser } from "@/actions/auth";
 import { autoSyncIfStale } from "@/actions/sync";
 import type { Role } from "@/lib/utils";
@@ -21,10 +22,11 @@ export default async function InventoryPage() {
   // Dynamic No-Beginning-Stock calculations:
   // Admin Pusat melihat stok pusat & seluruh toko.
   // Staf Toko HANYA melihat stok tokonya sendiri (tidak melihat stok pusat atau toko lain).
-  const [centralItems, storeGroups, allProducts] = await Promise.all([
+  const [centralItems, storeGroups, allProducts, activePRs] = await Promise.all([
     role === "ADMIN_PUSAT" ? getCentralStockCard() : Promise.resolve([]),
     getStoreStockCards(),
     db.select().from(products).all(),
+    role === "ADMIN_PUSAT" ? getActivePurchaseRequests() : Promise.resolve([]),
   ]);
 
   const autocompleteProducts = allProducts.map((p) => ({
@@ -55,6 +57,7 @@ export default async function InventoryPage() {
         centralItems={centralItems}
         storeGroups={storeGroups}
         autocompleteProducts={autocompleteProducts}
+        activePRs={activePRs}
         role={role}
         user={user}
       />

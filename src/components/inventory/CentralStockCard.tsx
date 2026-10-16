@@ -11,15 +11,21 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowUpDown,
+  ClipboardList,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SyncButton } from "./SyncButton";
+import { CreatePRModal } from "./CreatePRModal";
+import { PurchaseRequestListModal } from "./PurchaseRequestListModal";
 import { cn } from "@/lib/utils";
 import type { CentralStockCardItem } from "@/actions/mutations";
+import type { PurchaseRequestWithProduct } from "@/actions/purchase_requests";
 import type { Role } from "@/lib/utils";
 
 interface CentralStockCardProps {
   items: CentralStockCardItem[];
+  activePurchaseRequests?: PurchaseRequestWithProduct[];
   role: Role;
   onOpenInflow?: (preselectedItemId?: string) => void;
   onOpenSendStock?: () => void;
@@ -28,6 +34,7 @@ interface CentralStockCardProps {
 
 export function CentralStockCard({
   items,
+  activePurchaseRequests = [],
   role,
   onOpenInflow,
   onOpenSendStock,
@@ -35,6 +42,17 @@ export function CentralStockCard({
 }: CentralStockCardProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
+  // Modal States
+  const [createPRItem, setCreatePRItem] = useState<CentralStockCardItem | null>(null);
+  const [isPRListOpen, setIsPRListOpen] = useState(false);
+
+  const activePRCount =
+    activePurchaseRequests.length > 0
+      ? activePurchaseRequests.length
+      : items.filter((i) => i.status === "PR_CREATED").length;
+
+  const needPRCount = items.filter((i) => i.status === "KRITIS").length;
 
   const filtered = items.filter((item) => {
     const q = search.toLowerCase();
@@ -45,7 +63,8 @@ export function CentralStockCard({
 
     if (!matchSearch) return false;
 
-    if (statusFilter === "KRITIS") return item.status === "KRITIS";
+    if (statusFilter === "NEED_PR") return item.status === "KRITIS";
+    if (statusFilter === "PR_CREATED") return item.status === "PR_CREATED";
     if (statusFilter === "WARNING") return item.status === "WARNING";
     if (statusFilter === "AMAN") return item.status === "AMAN";
     return true;
@@ -75,7 +94,8 @@ export function CentralStockCard({
             className="rounded-xl border border-white/[0.08] bg-[#0C0F15] px-3.5 py-2 text-xs sm:text-sm text-zinc-200 font-medium focus:border-amber-400 focus:outline-none transition-colors cursor-pointer"
           >
             <option value="ALL">Semua Status ({items.length})</option>
-            <option value="KRITIS">🔴 Stok Kritis (Low)</option>
+            <option value="NEED_PR">🔴 Belum Dibuat PR ({needPRCount})</option>
+            <option value="PR_CREATED">📋 Sudah Dibuat PR ({activePRCount})</option>
             <option value="WARNING">🟡 Perlu Monitor</option>
             <option value="AMAN">🟢 Stok Aman</option>
           </select>
@@ -84,6 +104,22 @@ export function CentralStockCard({
         {/* Action Buttons for Admin */}
         {role === "ADMIN_PUSAT" && (
           <div className="flex flex-wrap items-center gap-2">
+            {/* Tombol Monitoring PR Aktif */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsPRListOpen(true)}
+              className={cn(
+                "text-xs border-sky-500/30 text-sky-300 hover:bg-sky-500/10",
+                activePRCount > 0 && "bg-sky-500/10 font-bold border-sky-500/50"
+              )}
+              title="Daftar barang yang sudah dibuatkan Purchase Request ke vendor"
+            >
+              <ClipboardList className="h-3.5 w-3.5 mr-1 text-sky-400" />
+              Daftar PR ({activePRCount})
+            </Button>
+
             {onOpenInflow && (
               <Button
                 type="button"
@@ -149,7 +185,7 @@ export function CentralStockCard({
                 <th className="py-3.5 px-4 text-right font-mono">
                   Min. Stok
                 </th>
-                <th className="py-3.5 px-4 text-center">Status Stok</th>
+                <th className="py-3.5 px-4 text-center">Status Stok & PR</th>
                 {role === "ADMIN_PUSAT" && (
                   <th className="py-3.5 px-4 text-right">Aksi</th>
                 )}
@@ -165,6 +201,7 @@ export function CentralStockCard({
               ) : (
                 filtered.map((item) => {
                   const isLow = item.status === "KRITIS";
+                  const isPRCreated = item.status === "PR_CREATED";
                   const isZero = item.sisa_stok_realtime === 0;
 
                   return (
@@ -172,7 +209,8 @@ export function CentralStockCard({
                       key={item.id}
                       className={cn(
                         "transition-colors hover:bg-white/[0.02]",
-                        isLow && "bg-rose-500/[0.03] hover:bg-rose-500/[0.06]"
+                        isLow && "bg-rose-500/[0.03] hover:bg-rose-500/[0.06]",
+                        isPRCreated && "bg-sky-500/[0.02] hover:bg-sky-500/[0.05]"
                       )}
                     >
                       {/* ID / SKU */}
@@ -212,6 +250,8 @@ export function CentralStockCard({
                             "inline-block rounded-lg px-2.5 py-1",
                             isLow
                               ? "bg-rose-500/15 text-rose-300 font-extrabold border border-rose-500/30"
+                              : isPRCreated
+                              ? "bg-sky-500/15 text-sky-200 font-bold border border-sky-500/30"
                               : "text-zinc-100"
                           )}
                         >
@@ -227,14 +267,32 @@ export function CentralStockCard({
                         {item.min_stock_central} {item.unit}
                       </td>
 
-                      {/* Status Stok */}
+                      {/* Status Stok & PR */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="inline-flex flex-col items-center gap-1">
-                          {item.status === "KRITIS" ? (
+                          {isPRCreated ? (
+                            <>
+                              <span
+                                className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-bold text-sky-300 border border-sky-500/30"
+                                title={`PR: ${item.active_pr?.pr_number} • Qty: ${item.active_pr?.quantity} ${item.unit}`}
+                              >
+                                <ClipboardCheck className="h-3.5 w-3.5 text-sky-400" />
+                                Sudah Dibuat PR
+                              </span>
+                              {item.active_pr && (
+                                <span className="text-[10px] font-mono text-sky-400/80 font-medium">
+                                  {item.active_pr.pr_number} • {item.active_pr.quantity} {item.unit}
+                                </span>
+                              )}
+                            </>
+                          ) : isLow ? (
                             <>
                               <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2.5 py-0.5 text-xs font-bold text-rose-300 border border-rose-500/30">
                                 <span className="h-1.5 w-1.5 rounded-full bg-rose-400 animate-subtle-pulse" />
-                                Restock Supplier
+                                Belum Dibuat PR
+                              </span>
+                              <span className="text-[10px] text-rose-400/90 font-semibold">
+                                Segera Order
                               </span>
                             </>
                           ) : item.status === "WARNING" ? (
@@ -251,18 +309,47 @@ export function CentralStockCard({
                         </div>
                       </td>
 
-                      {/* Aksi Tambah Stok Datang */}
+                      {/* Aksi */}
                       {role === "ADMIN_PUSAT" && (
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => onOpenInflow?.(item.id)}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 active:scale-95 transition-all shadow-sm"
-                            title={`Update Tambah Stok Masuk: ${item.name}`}
-                          >
-                            <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
-                            <span>+ Stok Datang</span>
-                          </button>
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            {/* Tombol Buat PR jika stok kritis dan belum ada PR */}
+                            {isLow && (
+                              <button
+                                type="button"
+                                onClick={() => setCreatePRItem(item)}
+                                className="inline-flex items-center gap-1 rounded-xl border border-rose-500/40 bg-rose-500/15 px-2.5 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-500/25 active:scale-95 transition-all shadow-sm"
+                                title={`Buat Purchase Request (Pengadaan ke Vendor) untuk ${item.name}`}
+                              >
+                                <ClipboardList className="h-3.5 w-3.5 text-rose-300" />
+                                <span>Buat PR</span>
+                              </button>
+                            )}
+
+                            {/* Tombol Detail PR jika sudah dibuatkan PR */}
+                            {isPRCreated && (
+                              <button
+                                type="button"
+                                onClick={() => setIsPRListOpen(true)}
+                                className="inline-flex items-center gap-1 rounded-xl border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/20 transition-all"
+                                title="Lihat rincian PR aktif"
+                              >
+                                <ClipboardCheck className="h-3.5 w-3.5 text-sky-400" />
+                                <span>Detail PR</span>
+                              </button>
+                            )}
+
+                            {/* Tombol Tambah Stok Datang */}
+                            <button
+                              type="button"
+                              onClick={() => onOpenInflow?.(item.id)}
+                              className="inline-flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 active:scale-95 transition-all shadow-sm"
+                              title={`Update Tambah Stok Masuk: ${item.name}`}
+                            >
+                              <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                              <span>+ Stok Datang</span>
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -273,6 +360,23 @@ export function CentralStockCard({
           </table>
         </div>
       </div>
+
+      {/* Modal Dialog Buat PR */}
+      <CreatePRModal
+        isOpen={Boolean(createPRItem)}
+        onClose={() => setCreatePRItem(null)}
+        item={createPRItem}
+      />
+
+      {/* Modal Dialog Daftar PR Aktif */}
+      <PurchaseRequestListModal
+        isOpen={isPRListOpen}
+        onClose={() => setIsPRListOpen(false)}
+        requests={activePurchaseRequests}
+        onOpenInflowWithPR={(itemId) => {
+          onOpenInflow?.(itemId);
+        }}
+      />
     </div>
   );
 }

@@ -113,6 +113,11 @@ const STOCK_STATUS: Record<
     cls: "bg-emerald-500/10 text-emerald-300 ring-emerald-500/25 border border-emerald-500/25 font-medium",
     dot: "bg-emerald-400 shadow-sm shadow-emerald-500/50",
   },
+  PR_CREATED: {
+    label: "Sudah Dibuat PR",
+    cls: "bg-sky-500/15 text-sky-300 ring-sky-500/25 border border-sky-500/25 font-semibold",
+    dot: "bg-sky-400 shadow-sm shadow-sky-500/50",
+  },
 };
 
 export function RequestStatusBadge({ status }: { status: string }) {

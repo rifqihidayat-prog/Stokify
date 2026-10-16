@@ -89,6 +89,21 @@ export async function ensureSchema() {
       created_at INTEGER NOT NULL
     );
   `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS purchase_requests (
+      id TEXT PRIMARY KEY,
+      pr_number TEXT NOT NULL UNIQUE,
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      quantity INTEGER NOT NULL,
+      supplier_name TEXT,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      created_by TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      completed_at INTEGER
+    );
+  `);
 }
 
 /**

@@ -9,11 +9,21 @@ import {
   products,
   storeStocks,
   users,
+  purchaseRequests,
   type MutationLog,
   type Product,
 } from "@/db/schema";
 import { fail, ok, type ActionResult } from "./types";
 import { authorize, requireUser, resolveStoreName } from "@/lib/authz";
+
+export interface ActivePRInfo {
+  id: string;
+  pr_number: string;
+  quantity: number;
+  supplier_name: string | null;
+  notes: string | null;
+  created_at: Date;
+}
 
 export interface CentralStockCardItem {
   id: string;
@@ -25,8 +35,9 @@ export interface CentralStockCardItem {
   stok_keluar: number;
   sisa_stok_realtime: number;
   min_stock_central: number;
-  status: "KRITIS" | "WARNING" | "AMAN";
+  status: "KRITIS" | "WARNING" | "AMAN" | "PR_CREATED";
   status_text: string;
+  active_pr?: ActivePRInfo | null;
 }
 
 export interface StoreStockCardItem {
@@ -67,8 +78,25 @@ function generateRef(prefix: string): string {
  */
 export async function getCentralStockCard(filters?: DateFilter): Promise<CentralStockCardItem[]> {
   await requireUser();
-  const allProducts = await db.select().from(products).all();
-  const allLogs = await db.select().from(mutationLogs).all();
+  const [allProducts, allLogs, activePRs] = await Promise.all([
+    db.select().from(products).all(),
+    db.select().from(mutationLogs).all(),
+    db.select().from(purchaseRequests).where(eq(purchaseRequests.status, "PENDING")).all(),
+  ]);
+
+  const prByProduct = new Map<string, ActivePRInfo>();
+  for (const pr of activePRs) {
+    if (!prByProduct.has(pr.product_id)) {
+      prByProduct.set(pr.product_id, {
+        id: pr.id,
+        pr_number: pr.pr_number,
+        quantity: pr.quantity,
+        supplier_name: pr.supplier_name,
+        notes: pr.notes,
+        created_at: new Date(pr.created_at),
+      });
+    }
+  }
 
   // Filter logs by month/year if provided
   const filteredLogs = allLogs.filter((log) => {
@@ -97,13 +125,19 @@ export async function getCentralStockCard(filters?: DateFilter): Promise<Central
       .reduce((sum, l) => sum + l.qty, 0);
 
     const sisa_stok_realtime = Math.max(0, stok_masuk - stok_keluar);
+    const active_pr = prByProduct.get(prod.id) || null;
 
-    let status: "KRITIS" | "WARNING" | "AMAN" = "AMAN";
+    let status: "KRITIS" | "WARNING" | "AMAN" | "PR_CREATED" = "AMAN";
     let status_text = "STOK AMAN";
 
-    if (sisa_stok_realtime <= prod.min_stock_central) {
+    const isLowStock = sisa_stok_realtime <= prod.min_stock_central;
+
+    if (active_pr) {
+      status = "PR_CREATED";
+      status_text = `SUDAH DIBUAT PR (${active_pr.pr_number} • ${active_pr.quantity} ${prod.unit})`;
+    } else if (isLowStock) {
       status = "KRITIS";
-      status_text = "STOK MENIPIS - ORDER LAGI";
+      status_text = "BELUM DIBUAT PR - SEGERA ORDER";
     } else if (sisa_stok_realtime <= Math.ceil(prod.min_stock_central * 1.25)) {
       status = "WARNING";
       status_text = "PERLU MONITOR";
@@ -121,6 +155,7 @@ export async function getCentralStockCard(filters?: DateFilter): Promise<Central
       min_stock_central: prod.min_stock_central,
       status,
       status_text,
+      active_pr,
     };
   });
 }
@@ -325,6 +360,20 @@ export async function createSupplierInflow(data: {
           current_stock_central: product.current_stock_central + it.qty,
         })
         .where(eq(products.id, it.itemId));
+
+      // 3. Jika ada Purchase Request (PR) yang PENDING untuk item ini, otomatis tandai sebagai COMPLETED
+      await tx
+        .update(purchaseRequests)
+        .set({
+          status: "COMPLETED",
+          completed_at: now,
+        })
+        .where(
+          and(
+            eq(purchaseRequests.product_id, it.itemId),
+            eq(purchaseRequests.status, "PENDING")
+          )
+        );
     }
   });
 
