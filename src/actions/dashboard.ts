@@ -2,17 +2,33 @@
 
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { products, storeRequests, equipmentRequests, mutationLogs } from "@/db/schema";
-import { getCentralStockCard, type CentralStockCardItem, type DateFilter } from "./mutations";
+import { products, storeRequests, equipmentRequests, mutationLogs, purchaseRequests } from "@/db/schema";
+import { getCentralStockCard, type CentralStockCardItem, type DateFilter, type ActivePRInfo } from "./mutations";
 import { getStockStatus, type StockLevel } from "@/lib/utils";
 import { requireUser } from "@/lib/authz";
+
+export type LowStockItem = {
+  id: string;
+  sku: string;
+  name: string;
+  unit: string;
+  current_stock_central: number;
+  min_stock_central: number;
+  status: StockLevel;
+  active_pr?: ActivePRInfo | null;
+};
 
 export type DashboardStats = {
   totalItems: number;
   criticalCount: number;
+  needPRCount: number;
+  activePRCount: number;
   pendingRequests: number;
   pendingEquipmentRequests: number;
   totalMutationsThisMonth: number;
+  warehouseHealthPercent: number;
+  safeCount: number;
+  monitorCount: number;
   chartData: { name: string; current: number; min: number }[];
   lowStock: LowStockItem[];
   criticalBannerItems: CentralStockCardItem[];
@@ -29,21 +45,14 @@ export type DashboardStats = {
   }[];
 };
 
-export type LowStockItem = {
-  id: string;
-  sku: string;
-  name: string;
-  unit: string;
-  current_stock_central: number;
-  min_stock_central: number;
-  status: StockLevel;
-};
-
 export async function getDashboardStats(filters?: DateFilter): Promise<DashboardStats> {
   await requireUser();
-  const centralCardItems = await getCentralStockCard(filters);
-  const requests = await db.select().from(storeRequests).all();
-  const equipment = await db.select().from(equipmentRequests).all();
+  const [centralCardItems, requests, equipment, activePRs] = await Promise.all([
+    getCentralStockCard(filters),
+    db.select().from(storeRequests).all(),
+    db.select().from(equipmentRequests).all(),
+    db.select().from(purchaseRequests).where(eq(purchaseRequests.status, "PENDING")).all(),
+  ]);
 
   const now = new Date();
   const currentYear = filters?.year || now.getFullYear();
@@ -65,7 +74,13 @@ export async function getDashboardStats(filters?: DateFilter): Promise<Dashboard
   });
 
   const criticalBannerItems = centralCardItems.filter((i) => i.status === "KRITIS");
-  const criticalCount = criticalBannerItems.length;
+  const needPRCount = criticalBannerItems.length;
+  const activePRCount = activePRs.length;
+  const safeCount = centralCardItems.filter((i) => i.status === "AMAN").length;
+  const monitorCount = centralCardItems.filter((i) => i.status === "WARNING").length;
+
+  const totalItemsCount = Math.max(1, centralCardItems.length);
+  const warehouseHealthPercent = Math.round((safeCount / totalItemsCount) * 100);
 
   const pendingRequests = requests.filter((r) => r.status === "PENDING").length;
 
@@ -73,11 +88,16 @@ export async function getDashboardStats(filters?: DateFilter): Promise<Dashboard
     (t) => t.status === "PENDING" || t.status === "APPROVED" || t.status === "ORDERED"
   ).length;
 
-  const chartData = centralCardItems.slice(0, 10).map((p) => ({
-    name: p.name.length > 15 ? p.name.slice(0, 15) + "..." : p.name,
-    current: p.sisa_stok_realtime,
-    min: p.min_stock_central,
-  }));
+  // 10 item prioritas untuk visualisasi grafik
+  const chartData = centralCardItems
+    .slice()
+    .sort((a, b) => a.sisa_stok_realtime - b.sisa_stok_realtime)
+    .slice(0, 10)
+    .map((p) => ({
+      name: p.name.length > 14 ? p.name.slice(0, 14) + "..." : p.name,
+      current: p.sisa_stok_realtime,
+      min: p.min_stock_central,
+    }));
 
   const lowStock: LowStockItem[] = centralCardItems
     .filter((p) => p.status !== "AMAN")
@@ -89,10 +109,11 @@ export async function getDashboardStats(filters?: DateFilter): Promise<Dashboard
       current_stock_central: p.sisa_stok_realtime,
       min_stock_central: p.min_stock_central,
       status: p.status,
+      active_pr: p.active_pr,
     }))
-    .sort((a, b) => a.current_stock_central / a.min_stock_central - b.current_stock_central / b.min_stock_central);
+    .sort((a, b) => a.current_stock_central - b.current_stock_central);
 
-  const recentMutations = allLogsWithProds.slice(0, 5).map(({ log, prod }) => {
+  const recentMutations = allLogsWithProds.slice(0, 7).map(({ log, prod }) => {
     let type = "MUTASI";
     if (log.reference_no.startsWith("IN-SUPPLIER")) type = "IN-SUPPLIER";
     else if (log.reference_no.startsWith("SJ-")) type = "SURAT JALAN";
@@ -115,14 +136,18 @@ export async function getDashboardStats(filters?: DateFilter): Promise<Dashboard
 
   return {
     totalItems: centralCardItems.length,
-    criticalCount,
+    criticalCount: criticalBannerItems.length,
+    needPRCount,
+    activePRCount,
     pendingRequests,
     pendingEquipmentRequests,
     totalMutationsThisMonth: mutationsThisMonth.length,
+    warehouseHealthPercent,
+    safeCount,
+    monitorCount,
     chartData,
     lowStock,
     criticalBannerItems,
     recentMutations,
   };
 }
-

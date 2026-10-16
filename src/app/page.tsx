@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { products } from "@/db/schema";
 import { getDashboardStats } from "@/actions/dashboard";
 import { getPickingList } from "@/actions/requests";
+import { getActivePurchaseRequests } from "@/actions/purchase_requests";
 import { getCurrentUser } from "@/actions/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DashboardHub } from "@/components/dashboard/DashboardHub";
@@ -15,10 +16,11 @@ export default async function DashboardPage() {
   if (!user) redirect("/logout");
   const role: Role = user.role;
 
-  const [stats, pickingItems, allProducts] = await Promise.all([
+  const [stats, pickingItems, allProducts, activePRs] = await Promise.all([
     getDashboardStats(),
     getPickingList(),
     db.select().from(products).all(),
+    role === "ADMIN_PUSAT" ? getActivePurchaseRequests() : Promise.resolve([]),
   ]);
 
   const autocompleteProducts = allProducts.map((p) => ({
@@ -45,6 +47,7 @@ export default async function DashboardPage() {
         stats={stats}
         pickingItems={pickingItems}
         autocompleteProducts={autocompleteProducts}
+        activePRs={activePRs}
         role={role}
         user={user ?? undefined}
       />

@@ -233,6 +233,30 @@ export async function syncProductsCore(): Promise<SyncCoreResult> {
       }
     }
 
+    // Bersihkan produk lokal / bawaan / dummy yang tidak ada di Google Sheets
+    const validGsheetSkus = new Set(
+      itemsToSync.map((i) => i.sku.trim().toLowerCase()).filter(Boolean)
+    );
+    const validGsheetNames = new Set(
+      itemsToSync.map((i) => i.name.trim().toLowerCase())
+    );
+
+    const currentAllProducts = await db.select().from(products).all();
+    let prunedCount = 0;
+
+    for (const prod of currentAllProducts) {
+      const matchSku = prod.sku ? validGsheetSkus.has(prod.sku.trim().toLowerCase()) : false;
+      const matchName = validGsheetNames.has(prod.name.trim().toLowerCase());
+      if (!matchSku && !matchName) {
+        try {
+          await db.delete(products).where(eq(products.id, prod.id));
+          prunedCount++;
+        } catch (e) {
+          console.warn(`[syncProductsCore] Gagal menghapus produk usang ${prod.name}:`, e);
+        }
+      }
+    }
+
     lastSyncTimestamp = Date.now();
 
     try {
@@ -243,9 +267,10 @@ export async function syncProductsCore(): Promise<SyncCoreResult> {
       // Ignore outside request context
     }
 
+    const pruneNotice = prunedCount > 0 ? `, ${prunedCount} produk non-sheet dibersihkan` : "";
     return {
       ok: true,
-      message: `Sinkronisasi berhasil! ${itemsToSync.length} produk diproses (${insertedCount} produk baru ditambahkan, ${updatedCount} produk diperbarui).`,
+      message: `Sinkronisasi berhasil! ${itemsToSync.length} produk diproses (${insertedCount} produk baru ditambahkan, ${updatedCount} produk diperbarui${pruneNotice}).`,
       insertedCount,
       updatedCount,
       totalRows: itemsToSync.length,
