@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { products, storeStocks, users, type Product } from "@/db/schema";
 import { fail, ok, type ActionResult } from "./types";
 import { authorize } from "@/lib/authz";
+import { pruneStaleProducts } from "@/lib/prune-products";
 
 const DEFAULT_SHEET_ID = process.env.GOOGLE_SHEET_ID || "1-LakqsOxhn3jbUaizBuLjNVRk_0K8B8xbBLe0RmidaU";
 
@@ -233,29 +234,12 @@ export async function syncProductsCore(): Promise<SyncCoreResult> {
       }
     }
 
-    // Bersihkan produk lokal / bawaan / dummy yang tidak ada di Google Sheets
-    const validGsheetSkus = new Set(
-      itemsToSync.map((i) => i.sku.trim().toLowerCase()).filter(Boolean)
+    // Bersihkan produk dummy yang tidak ada di Google Sheets. Produk yang punya riwayat
+    // (mutasi, pengajuan, PR, stok) TIDAK dihapus; lihat src/lib/prune-products.ts.
+    const prune = await pruneStaleProducts(
+      new Set(itemsToSync.map((i) => i.sku.trim().toLowerCase()).filter(Boolean)),
+      new Set(itemsToSync.map((i) => i.name.trim().toLowerCase()))
     );
-    const validGsheetNames = new Set(
-      itemsToSync.map((i) => i.name.trim().toLowerCase())
-    );
-
-    const currentAllProducts = await db.select().from(products).all();
-    let prunedCount = 0;
-
-    for (const prod of currentAllProducts) {
-      const matchSku = prod.sku ? validGsheetSkus.has(prod.sku.trim().toLowerCase()) : false;
-      const matchName = validGsheetNames.has(prod.name.trim().toLowerCase());
-      if (!matchSku && !matchName) {
-        try {
-          await db.delete(products).where(eq(products.id, prod.id));
-          prunedCount++;
-        } catch (e) {
-          console.warn(`[syncProductsCore] Gagal menghapus produk usang ${prod.name}:`, e);
-        }
-      }
-    }
 
     lastSyncTimestamp = Date.now();
 
@@ -267,7 +251,10 @@ export async function syncProductsCore(): Promise<SyncCoreResult> {
       // Ignore outside request context
     }
 
-    const pruneNotice = prunedCount > 0 ? `, ${prunedCount} produk non-sheet dibersihkan` : "";
+    const pruneParts: string[] = [];
+    if (prune.deleted > 0) pruneParts.push(`${prune.deleted} produk dummy dihapus`);
+    if (prune.retired > 0) pruneParts.push(`${prune.retired} produk non-sheet dinonaktifkan`);
+    const pruneNotice = pruneParts.length > 0 ? `, ${pruneParts.join(", ")}` : "";
     return {
       ok: true,
       message: `Sinkronisasi berhasil! ${itemsToSync.length} produk diproses (${insertedCount} produk baru ditambahkan, ${updatedCount} produk diperbarui${pruneNotice}).`,
