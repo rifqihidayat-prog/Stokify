@@ -1,13 +1,15 @@
 "use client";
 
 import React from "react";
-import { AlertTriangle, PackageX, ClipboardList, ClipboardCheck } from "lucide-react";
+import { AlertTriangle, PackageX, ClipboardList, ClipboardCheck, Pencil, SlidersHorizontal } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import type { LowStockItem } from "@/actions/dashboard";
+import type { Role } from "@/lib/utils";
 
 interface LowStockTableProps {
   items: LowStockItem[];
+  role?: Role;
   onOpenCreatePR?: (item: {
     id: string;
     sku: string;
@@ -18,9 +20,16 @@ interface LowStockTableProps {
     min_stock_central: number;
   }) => void;
   onOpenPRList?: () => void;
+  onOpenEditMinStock?: (item: LowStockItem) => void;
 }
 
-export function LowStockTable({ items, onOpenCreatePR, onOpenPRList }: LowStockTableProps) {
+export function LowStockTable({
+  items,
+  role,
+  onOpenCreatePR,
+  onOpenPRList,
+  onOpenEditMinStock,
+}: LowStockTableProps) {
   const needPRCount = items.filter((i) => i.status === "KRITIS").length;
   const prCreatedCount = items.filter((i) => i.status === "PR_CREATED").length;
 
@@ -116,10 +125,22 @@ export function LowStockTable({ items, onOpenCreatePR, onOpenPRList }: LowStockT
                         >
                           {p.current_stock_central}
                         </span>
-                        <span className="text-zinc-500 font-normal text-xs">
-                          {" "}
-                          / {p.min_stock_central} {p.unit}
-                        </span>
+                        {role === "ADMIN_PUSAT" && onOpenEditMinStock ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenEditMinStock(p)}
+                            className="inline-flex items-center gap-1 group text-zinc-400 hover:text-amber-400 font-normal text-xs transition-colors py-0.5 px-1 rounded hover:bg-white/[0.04] cursor-pointer"
+                            title="Klik untuk ubah batas minimum stok"
+                          >
+                            <span>/ {p.min_stock_central} {p.unit}</span>
+                            <Pencil className="h-2.5 w-2.5 text-zinc-500 group-hover:text-amber-400 transition-colors" />
+                          </button>
+                        ) : (
+                          <span className="text-zinc-500 font-normal text-xs">
+                            {" "}
+                            / {p.min_stock_central} {p.unit}
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -151,34 +172,48 @@ export function LowStockTable({ items, onOpenCreatePR, onOpenPRList }: LowStockT
 
                     {/* Aksi Cepat */}
                     <td className="py-3 px-3 text-right whitespace-nowrap">
-                      {isKritis && onOpenCreatePR ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onOpenCreatePR({
-                              id: p.id,
-                              sku: p.sku,
-                              name: p.name,
-                              unit: p.unit,
-                              sisa_stok_realtime: p.current_stock_central,
-                              min_stock_central: p.min_stock_central,
-                            })
-                          }
-                          className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500/25 active:scale-95 transition-all shadow-sm"
-                          title={`Buat PR untuk ${p.name}`}
-                        >
-                          <ClipboardList className="h-3.5 w-3.5 text-amber-400" />
-                          <span>Buat PR</span>
-                        </button>
-                      ) : isPRCreated && onOpenPRList ? (
-                        <button
-                          type="button"
-                          onClick={onOpenPRList}
-                          className="inline-flex items-center gap-1 text-[11px] text-sky-400 hover:text-sky-300 hover:underline transition-colors"
-                        >
-                          <span>Lihat PR &rarr;</span>
-                        </button>
-                      ) : null}
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        {role === "ADMIN_PUSAT" && onOpenEditMinStock && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenEditMinStock(p)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-xs text-zinc-300 hover:text-amber-300 hover:border-amber-500/30 hover:bg-amber-500/10 transition-colors"
+                            title={`Ubah batas minimum stok: ${p.name}`}
+                          >
+                            <SlidersHorizontal className="h-3 w-3 text-amber-400" />
+                            <span className="hidden sm:inline text-[11px]">Min</span>
+                          </button>
+                        )}
+
+                        {isKritis && onOpenCreatePR ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onOpenCreatePR({
+                                id: p.id,
+                                sku: p.sku,
+                                name: p.name,
+                                unit: p.unit,
+                                sisa_stok_realtime: p.current_stock_central,
+                                min_stock_central: p.min_stock_central,
+                              })
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500/25 active:scale-95 transition-all shadow-sm"
+                            title={`Buat PR untuk ${p.name}`}
+                          >
+                            <ClipboardList className="h-3.5 w-3.5 text-amber-400" />
+                            <span>Buat PR</span>
+                          </button>
+                        ) : isPRCreated && onOpenPRList ? (
+                          <button
+                            type="button"
+                            onClick={onOpenPRList}
+                            className="inline-flex items-center gap-1 text-[11px] text-sky-400 hover:text-sky-300 hover:underline transition-colors"
+                          >
+                            <span>Lihat PR &rarr;</span>
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );

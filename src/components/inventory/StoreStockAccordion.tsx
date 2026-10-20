@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronDown, ChevronUp, Store, Moon, Scale, PackagePlus, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Store, Moon, Scale, PackagePlus, AlertCircle, CheckCircle2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { EditMinStockModal, type MinStockEditableItem } from "./EditMinStockModal";
 import type { StoreStockGroup } from "@/actions/mutations";
 import type { Role } from "@/lib/utils";
 
@@ -22,6 +23,8 @@ export function StoreStockAccordion({
   onOpenAdjustment,
   onOpenRequest,
 }: StoreStockAccordionProps) {
+  const [editMinStockItem, setEditMinStockItem] = useState<MinStockEditableItem | null>(null);
+
   // Untuk Admin Pusat: accordion tertutup secara default.
   // Untuk Staf Toko (hanya toko miliknya sendiri): otomatis terbuka agar stok langsung terlihat.
   const [openStores, setOpenStores] = useState<Record<string, boolean>>(() => {
@@ -228,8 +231,33 @@ export function StoreStockAccordion({
                                 </span>
                               </span>
                             </td>
-                            <td className="py-3.5 px-4 text-right font-mono text-xs text-zinc-400 tabular-nums">
-                              {item.min_stock_store} {item.unit}
+                            <td className="py-3.5 px-4 text-right font-mono text-xs tabular-nums">
+                              {role === "ADMIN_PUSAT" ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditMinStockItem({
+                                      id: item.id,
+                                      sku: item.sku,
+                                      name: item.name,
+                                      unit: item.unit,
+                                      category: item.category,
+                                      current_stock: item.sisa_stok_realtime,
+                                      min_stock_central: item.min_stock_central ?? 10,
+                                      min_stock_store: item.min_stock_store,
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-1.5 group text-zinc-300 hover:text-amber-400 transition-colors cursor-pointer py-1 px-1.5 rounded-lg hover:bg-white/[0.04]"
+                                  title="Klik untuk ubah batas minimum stok"
+                                >
+                                  <span>{item.min_stock_store} {item.unit}</span>
+                                  <Pencil className="h-3 w-3 text-zinc-500 group-hover:text-amber-400 transition-colors" />
+                                </button>
+                              ) : (
+                                <span className="text-zinc-400">
+                                  {item.min_stock_store} {item.unit}
+                                </span>
+                              )}
                             </td>
                             <td className="py-3.5 px-4 text-center">
                               {item.status === "KRITIS" ? (
@@ -255,6 +283,13 @@ export function StoreStockAccordion({
           </div>
         );
       })}
+
+      {/* Modal Dialog Ubah Minimum Stok */}
+      <EditMinStockModal
+        isOpen={Boolean(editMinStockItem)}
+        onClose={() => setEditMinStockItem(null)}
+        item={editMinStockItem}
+      />
     </div>
   );
 }

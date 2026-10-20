@@ -35,6 +35,7 @@ export interface CentralStockCardItem {
   stok_keluar: number;
   sisa_stok_realtime: number;
   min_stock_central: number;
+  min_stock_store: number;
   status: "KRITIS" | "WARNING" | "AMAN" | "PR_CREATED";
   status_text: string;
   active_pr?: ActivePRInfo | null;
@@ -50,6 +51,7 @@ export interface StoreStockCardItem {
   stok_keluar: number;
   sisa_stok_realtime: number;
   min_stock_store: number;
+  min_stock_central?: number;
   status: "KRITIS" | "WARNING" | "AMAN";
 }
 
@@ -153,6 +155,7 @@ export async function getCentralStockCard(filters?: DateFilter): Promise<Central
       stok_keluar,
       sisa_stok_realtime,
       min_stock_central: prod.min_stock_central,
+      min_stock_store: prod.min_stock_store,
       status,
       status_text,
       active_pr,
@@ -262,6 +265,7 @@ export async function getStoreStockCards(filters?: DateFilter): Promise<StoreSto
           stok_keluar,
           sisa_stok_realtime,
           min_stock_store: prod.min_stock_store,
+          min_stock_central: prod.min_stock_central,
           status,
         });
       }

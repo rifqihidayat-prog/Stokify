@@ -13,11 +13,14 @@ import {
   ArrowUpDown,
   ClipboardList,
   ClipboardCheck,
+  Pencil,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SyncButton } from "./SyncButton";
 import { CreatePRModal } from "./CreatePRModal";
 import { PurchaseRequestListModal } from "./PurchaseRequestListModal";
+import { EditMinStockModal } from "./EditMinStockModal";
 import { cn } from "@/lib/utils";
 import type { CentralStockCardItem } from "@/actions/mutations";
 import type { PurchaseRequestWithProduct } from "@/actions/purchase_requests";
@@ -46,6 +49,7 @@ export function CentralStockCard({
   // Modal States
   const [createPRItem, setCreatePRItem] = useState<CentralStockCardItem | null>(null);
   const [isPRListOpen, setIsPRListOpen] = useState(false);
+  const [editMinStockItem, setEditMinStockItem] = useState<CentralStockCardItem | null>(null);
 
   const activePRCount =
     activePurchaseRequests.length > 0
@@ -263,8 +267,22 @@ export function CentralStockCard({
                       </td>
 
                       {/* Min Stok Pusat */}
-                      <td className="py-3.5 px-4 text-right font-mono text-xs text-zinc-400 tabular-nums">
-                        {item.min_stock_central} {item.unit}
+                      <td className="py-3.5 px-4 text-right font-mono text-xs tabular-nums">
+                        {role === "ADMIN_PUSAT" ? (
+                          <button
+                            type="button"
+                            onClick={() => setEditMinStockItem(item)}
+                            className="inline-flex items-center gap-1.5 group text-zinc-300 hover:text-amber-400 transition-colors cursor-pointer py-1 px-1.5 rounded-lg hover:bg-white/[0.04]"
+                            title="Klik untuk ubah batas minimum stok"
+                          >
+                            <span>{item.min_stock_central} {item.unit}</span>
+                            <Pencil className="h-3 w-3 text-zinc-500 group-hover:text-amber-400 transition-colors" />
+                          </button>
+                        ) : (
+                          <span className="text-zinc-400">
+                            {item.min_stock_central} {item.unit}
+                          </span>
+                        )}
                       </td>
 
                       {/* Status Stok & PR */}
@@ -339,6 +357,17 @@ export function CentralStockCard({
                               </button>
                             )}
 
+                            {/* Tombol Ubah Min Stok */}
+                            <button
+                              type="button"
+                              onClick={() => setEditMinStockItem(item)}
+                              className="inline-flex items-center gap-1 rounded-xl border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-xs font-semibold text-zinc-300 hover:text-amber-300 hover:border-amber-500/30 hover:bg-amber-500/10 active:scale-95 transition-all shadow-sm"
+                              title={`Ubah Batas Minimum Stok: ${item.name}`}
+                            >
+                              <SlidersHorizontal className="h-3.5 w-3.5 text-amber-400" />
+                              <span className="hidden xl:inline">Ubah Min</span>
+                            </button>
+
                             {/* Tombol Tambah Stok Datang */}
                             <button
                               type="button"
@@ -376,6 +405,26 @@ export function CentralStockCard({
         onOpenInflowWithPR={(itemId) => {
           onOpenInflow?.(itemId);
         }}
+      />
+
+      {/* Modal Dialog Ubah Minimum Stok */}
+      <EditMinStockModal
+        isOpen={Boolean(editMinStockItem)}
+        onClose={() => setEditMinStockItem(null)}
+        item={
+          editMinStockItem
+            ? {
+                id: editMinStockItem.id,
+                sku: editMinStockItem.sku,
+                name: editMinStockItem.name,
+                unit: editMinStockItem.unit,
+                category: editMinStockItem.category,
+                current_stock: editMinStockItem.sisa_stok_realtime,
+                min_stock_central: editMinStockItem.min_stock_central,
+                min_stock_store: editMinStockItem.min_stock_store ?? 5,
+              }
+            : null
+        }
       />
     </div>
   );

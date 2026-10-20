@@ -33,8 +33,9 @@ import { PickingListModal } from "@/components/operations/PickingListModal";
 import { DailyClosingModal } from "@/components/operations/DailyClosingModal";
 import { CreatePRModal } from "@/components/inventory/CreatePRModal";
 import { PurchaseRequestListModal } from "@/components/inventory/PurchaseRequestListModal";
+import { EditMinStockModal } from "@/components/inventory/EditMinStockModal";
 import { SyncButton } from "@/components/inventory/SyncButton";
-import type { DashboardStats } from "@/actions/dashboard";
+import type { DashboardStats, LowStockItem } from "@/actions/dashboard";
 import type { PickingListItem } from "@/actions/requests";
 import type { PurchaseRequestWithProduct } from "@/actions/purchase_requests";
 import type { AutocompleteItem } from "@/components/ui/Autocomplete";
@@ -70,6 +71,7 @@ export function DashboardHub({
   // PR Modals
   const [createPRItem, setCreatePRItem] = useState<CentralStockCardItem | null>(null);
   const [isPRListOpen, setIsPRListOpen] = useState(false);
+  const [editMinStockItem, setEditMinStockItem] = useState<LowStockItem | null>(null);
 
   const handleRefresh = () => {
     router.refresh();
@@ -295,17 +297,20 @@ export function DashboardHub({
         {/* Tabel Stok Rendah dengan Aksi Langsung Buat PR */}
         <LowStockTable
           items={stats.lowStock}
+          role={role}
           onOpenCreatePR={(item) => {
             setCreatePRItem({
               ...item,
               category: "DAILY_CONSUMABLE",
               stok_masuk: 0,
               stok_keluar: 0,
+              min_stock_store: 5,
               status: "KRITIS",
               status_text: "BELUM DIBUAT PR",
             });
           }}
           onOpenPRList={() => setIsPRListOpen(true)}
+          onOpenEditMinStock={(item) => setEditMinStockItem(item)}
         />
       </div>
 
@@ -433,6 +438,25 @@ export function DashboardHub({
         onOpenInflowWithPR={(itemId) => {
           setIsInflowOpen(true);
         }}
+      />
+
+      {/* Modal Ubah Minimum Stok Langsung dari Dashboard */}
+      <EditMinStockModal
+        isOpen={Boolean(editMinStockItem)}
+        onClose={() => setEditMinStockItem(null)}
+        item={
+          editMinStockItem
+            ? {
+                id: editMinStockItem.id,
+                sku: editMinStockItem.sku,
+                name: editMinStockItem.name,
+                unit: editMinStockItem.unit,
+                current_stock: editMinStockItem.current_stock_central,
+                min_stock_central: editMinStockItem.min_stock_central,
+                min_stock_store: editMinStockItem.min_stock_store ?? 5,
+              }
+            : null
+        }
       />
     </div>
   );

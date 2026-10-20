@@ -14,6 +14,7 @@ export type LowStockItem = {
   unit: string;
   current_stock_central: number;
   min_stock_central: number;
+  min_stock_store: number;
   status: StockLevel;
   active_pr?: ActivePRInfo | null;
 };
@@ -108,6 +109,7 @@ export async function getDashboardStats(filters?: DateFilter): Promise<Dashboard
       unit: p.unit,
       current_stock_central: p.sisa_stok_realtime,
       min_stock_central: p.min_stock_central,
+      min_stock_store: p.min_stock_store,
       status: p.status,
       active_pr: p.active_pr,
     }))
